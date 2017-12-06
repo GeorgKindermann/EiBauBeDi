@@ -105,6 +105,78 @@ namespace EiBauBeDi {
     return(nx % 2);
   }
 
+  //Points where line cuts a circle
+  vector<point> cutLineCircle(const point &a0, const point &a1,
+			      const point &c, const double &r) {
+    vector<point> ret;
+    double dx = a1.x - a0.x;
+    double dy = a1.y - a0.y;
+    double dr = sqrt(pow(dx, 2) + pow(dy,2));
+    double D = (a0.x - c.x) * (a1.y - c.y) - (a1.x - c.x) * (a0.y - c.y);
+    double incidence = pow(r,2) * pow(dr,2) - pow(D,2);
+    if(incidence > 0) { //==0 .. tangent is not needed here
+      array<double, 2> x{};
+      array<double, 2> y{};
+      double tt = sqrt(incidence);
+      x[0] = c.x + (D*dy + copysign(1.0, dy) * dx * tt) / pow(dr,2);
+      x[1] = c.x + (D*dy - copysign(1.0, dy) * dx * tt) / pow(dr,2);
+      y[0] = c.y + (-D*dx + abs(dy) * tt) / pow(dr,2);
+      y[1] = c.y + (-D*dx - abs(dy) * tt) / pow(dr,2);
+      for(int i=0; i<2; ++i) {
+	if(x[i] >= min(a0.x, a1.x) && x[i] <= max(a0.x, a1.x) &&
+	   y[i] >= min(a0.y, a1.y) && y[i] <= max(a0.y, a1.y)) {
+	  ret.push_back(point{x[i], y[i]});}
+      }
+    }
+    return(ret);
+  }
+  
+  //Share of circle circumference inside polygon
+  double wgtCircC(const point &pkt, const double &radius, const vector<point> &polygon) {
+    double wgt = 1.;
+    //polygon is totaly inside the circle
+    unsigned int nPointsOutside = 0;
+    double r2 = pow(radius,2);
+    for(auto&& i : polygon) {
+      double dist2 = pow(i.x - pkt.x, 2) + pow(i.y - pkt.y, 2);
+      if(dist2 > r2) {++nPointsOutside;}
+    }
+    if(nPointsOutside > 0) {
+      vector<point> cutPoint;
+      {
+	vector<point>::const_iterator previous = prev(polygon.end());
+	for(vector<point>::const_iterator current = polygon.begin(); current != polygon.end(); ++current) {
+	  vector<point> tmp = cutLineCircle(*previous, *current, pkt, radius);
+	  cutPoint.insert(cutPoint.end(), tmp.begin(), tmp.end());
+	  previous = current;
+	}
+      }
+      if(cutPoint.size() > 1) {
+	vector<double> rad;
+	for(auto&& i : cutPoint) {rad.push_back(atan2(pkt.y-i.y, pkt.x-i.x));}
+	sort(rad.begin(), rad.end());
+	auto last = unique(rad.begin(), rad.end());
+	rad.erase(last, rad.end());
+	double sum = 0.;
+	double sumIn = 0.;
+	{
+	  vector<double>::const_iterator previous = prev(rad.end());
+	  double between = *previous + (*rad.begin() - *previous)/2.;
+	  bool inPlot = EiBauBeDi::pointInPolyCN(EiBauBeDi::point{pkt.x + radius * cos(between), pkt.y + radius * sin(between)}, polygon);
+	  for(vector<double>::const_iterator current = rad.begin(); current != rad.end(); ++current) {
+	    double tmp = fmod(*current - *previous + M_PI * 2., M_PI * 2.);
+	    sum += tmp;
+	    if(inPlot) {sumIn += tmp;}
+	    inPlot = !inPlot;
+	    previous = current;
+	  }
+	}
+	if(sum > 0.) {wgt = sumIn/sum;}
+      }
+    } else {wgt = 0.;}
+    return(wgt);
+  }
+  
 }
 
 int main(int argc, char *argv[]) {
@@ -135,7 +207,7 @@ int main(int argc, char *argv[]) {
     for(auto&& i : tmpPlotCorners) {plotCorners.push_back(EiBauBeDi::point{i[1],i[2]});}
   }
   //for(auto&& i : plotCorners) cout << i.x << " " << i.y << endl;
-  
+
   //Read in the tree data
   vector<EiBauBeDi::tree> trees;
   {
@@ -175,19 +247,20 @@ int main(int argc, char *argv[]) {
     cout << "tree g/ha" << endl;
     double r = 7.; //Sample Radius
     valarray<double> sumg(0., trees.size());
-    r = pow(r, 2);
+    double r2 = pow(r, 2);
     size_t line = 0;
     for(auto&& i : trees) {
       for(auto&& j : trees) {
-	if(pow(i.x - j.x, 2) + pow(i.y - j.y, 2) <= r) {
-	  //Plot border correction is currently MISSING
-	  double weight = 1.;
+	double dist2 = pow(i.x - j.x, 2) + pow(i.y - j.y, 2);
+	if(dist2 <= r2) {
+	  //Plot border correction
+	  double weight = 1./EiBauBeDi::wgtCircC(EiBauBeDi::point{i.x,i.y}, sqrt(dist2), plotCorners);
 	  sumg[line] += pow(j.d,2) * weight;
 	}
       }
       ++line;
     }
-    sumg /= 4.*r;
+    sumg /= 4.*r2;
     for(size_t i=0; i < trees.size(); ++i) {
       cout << trees[i].nr << " " << sumg[i] << endl;
     }
@@ -202,9 +275,10 @@ int main(int argc, char *argv[]) {
     size_t line = 0;
     for(auto&& i : trees) {
       for(auto&& j : trees) {
-	if(pow(i.x - j.x, 2) + pow(i.y - j.y, 2) <= 2500 * pow(j.d/100., 2) / k) {
-	  //Plot border correction is currently MISSING
-	  double weight = 1.;
+	double dist2 = pow(i.x - j.x, 2) + pow(i.y - j.y, 2);
+	if(dist2 <= 2500 * pow(j.d/100., 2) / k) {
+	  //Plot border correction
+	  double weight = 1./EiBauBeDi::wgtCircC(EiBauBeDi::point{i.x,i.y}, sqrt(dist2), plotCorners);
 	  sumg[line] += k * weight;
 	}
       }
