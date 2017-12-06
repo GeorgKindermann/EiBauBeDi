@@ -105,7 +105,6 @@ namespace EiBauBeDi {
     return(nx % 2);
   }
 
-
 }
 
 int main(int argc, char *argv[]) {
@@ -301,6 +300,81 @@ int main(int argc, char *argv[]) {
     sumg /= 4.*r2*sumWeight;
     for(size_t i=0; i < trees.size(); ++i) {
       cout << trees[i].nr << " " << sumg[i] << endl;}
+  }
+
+  //assign plot area to trees - Winner takes it all
+  {
+    cout << "\nBasal area from single tree growing area on raster" << endl;
+    cout << "tree g/ha" << endl;
+    //Find plot extends
+    EiBauBeDi::point plu = {plotCorners[0].x,plotCorners[0].y};
+    EiBauBeDi::point pro = {plotCorners[0].x,plotCorners[0].y};
+    for(auto&& i : plotCorners) {
+      plu.x = min(plu.x, i.x); plu.y = min(plu.y, i.y);
+      pro.x = max(pro.x, i.x); pro.y = max(pro.y, i.y);
+    }
+    double dxy = 0.1; //Distance between raster points
+    valarray<unsigned int> sump(0u, trees.size());
+    for(double x = plu.x + dxy/2.; x <= pro.x; x += dxy) {
+      for(double y = plu.y + dxy/2.; y <= pro.y; y += dxy) {
+	if(EiBauBeDi::pointInPolyCN(EiBauBeDi::point{x, y}, plotCorners)) {
+	  size_t winner = 0;
+	  double minInfl = std::numeric_limits<double>::infinity();
+	  size_t line = 0;
+	  for(auto&& i : trees) {
+	    double infl = (pow(i.x - x, 2) + pow(i.y - y, 2)) / pow(i.d,2);
+	    if(minInfl > infl) {
+	      minInfl = infl;
+	      winner = line;
+	    }
+	    ++line;
+	  }
+	  ++sump[winner];
+	}
+      }
+    }
+    for(size_t i=0; i < trees.size(); ++i) {
+      cout << trees[i].nr << " " << pow(trees[i].d/2.,2)*M_PI/(sump[i]*dxy*dxy) << endl;
+    }
+  }
+
+    //assign plot area to trees - Share pixel between trees
+  {
+    cout << "\nBasal area from single tree growing shared area on raster" << endl;
+    cout << "tree g/ha" << endl;
+    //Find plot extends
+    EiBauBeDi::point plu = {plotCorners[0].x,plotCorners[0].y};
+    EiBauBeDi::point pro = {plotCorners[0].x,plotCorners[0].y};
+    for(auto&& i : plotCorners) {
+      plu.x = min(plu.x, i.x); plu.y = min(plu.y, i.y);
+      pro.x = max(pro.x, i.x); pro.y = max(pro.y, i.y);
+    }
+    double dxy = 0.1; //Distance between raster points
+    double maxInfl = 0.04; //trees with higher infl are not used
+    valarray<double> sump(0., trees.size());
+    for(double x = plu.x + dxy/2.; x <= pro.x; x += dxy) {
+      for(double y = plu.y + dxy/2.; y <= pro.y; y += dxy) {
+	if(EiBauBeDi::pointInPolyCN(EiBauBeDi::point{x, y}, plotCorners)) {
+	  double sInfl = 0.; //summ of influence on this grid
+	  stack<pair<size_t, double> > treesInSample; //idx, infl
+	  size_t line = 0;
+	  for(auto&& i : trees) {
+	    double infl = (pow(i.x - x, 2) + pow(i.y - y, 2)) / pow(i.d,2);
+	    if(maxInfl > infl) {
+	      sInfl += maxInfl - infl;
+	      treesInSample.push(make_pair(line, maxInfl - infl));}
+	    ++line;
+	  }
+	  while(!treesInSample.empty()) {
+    sump[treesInSample.top().first] += treesInSample.top().second / sInfl;
+	    treesInSample.pop();}
+ 	}
+      }
+    }
+    sump *= dxy*dxy;
+    for(size_t i=0; i < trees.size(); ++i) {
+      cout << trees[i].nr << " " << pow(trees[i].d/2.,2)*M_PI/sump[i] << endl;
+    }
   }
 
   return(0);
