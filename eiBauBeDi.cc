@@ -171,7 +171,7 @@ namespace EiBauBeDi {
 	    previous = current;
 	  }
 	}
-	if(sum > 0.) {wgt = sumIn/sum;}
+	if(sum > 0.) {wgt = sumIn/sum;}  //sum should be M_PI * 2.
       }
     } else {wgt = 0.;}
     return(wgt);
