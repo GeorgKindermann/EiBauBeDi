@@ -379,7 +379,7 @@ int main(int argc, char *argv[]) {
   //assign plot area to trees - Winner takes it all
   {
     cout << "\nBasal area from single tree growing area on raster" << endl;
-    cout << "tree g/ha" << endl;
+    cout << "tree g/ha distanceCenter directionCenter uncircularity" << endl;
     //Find plot extends
     EiBauBeDi::point plu = {plotCorners[0].x,plotCorners[0].y};
     EiBauBeDi::point pro = {plotCorners[0].x,plotCorners[0].y};
@@ -389,6 +389,9 @@ int main(int argc, char *argv[]) {
     }
     double dxy = 0.1; //Distance between raster points
     valarray<unsigned int> sump(0u, trees.size());
+    valarray<double> sumpX(0., trees.size());
+    valarray<double> sumpY(0., trees.size());
+    valarray<double> sumd(0., trees.size());
     for(double x = plu.x + dxy/2.; x <= pro.x; x += dxy) {
       for(double y = plu.y + dxy/2.; y <= pro.y; y += dxy) {
 	if(EiBauBeDi::pointInPolyCN(EiBauBeDi::point{x, y}, plotCorners)) {
@@ -404,11 +407,37 @@ int main(int argc, char *argv[]) {
 	    ++line;
 	  }
 	  ++sump[winner];
+	  sumpX[winner] += x; sumpY[winner] += y;
+	}
+      }
+    }
+    for(double x = plu.x + dxy/2.; x <= pro.x; x += dxy) {
+      for(double y = plu.y + dxy/2.; y <= pro.y; y += dxy) {
+	if(EiBauBeDi::pointInPolyCN(EiBauBeDi::point{x, y}, plotCorners)) {
+	  size_t winner = 0;
+	  double minInfl = std::numeric_limits<double>::infinity();
+	  size_t line = 0;
+	  for(auto&& i : trees) {
+	    double infl = (pow(i.x - x, 2) + pow(i.y - y, 2)) / pow(i.d,2);
+	    if(minInfl > infl) {
+	      minInfl = infl;
+	      winner = line;
+	    }
+	    ++line;
+	  }
+	  double centerX = sumpX[winner] / sump[winner];
+	  double centerY = sumpY[winner] / sump[winner];
+	  sumd[winner] += sqrt(pow(centerX - x, 2) + pow(centerY - y, 2));
 	}
       }
     }
     for(size_t i=0; i < trees.size(); ++i) {
-      cout << trees[i].nr << " " << pow(trees[i].d/2.,2)*M_PI/(sump[i]*dxy*dxy) << endl;
+      double area = sump[i]*dxy*dxy;
+      cout << trees[i].nr << " " << pow(trees[i].d/2.,2)*M_PI/area
+	   << " " << sqrt(pow(sumpX[i] / sump[i] - trees[i].x,2) + pow(sumpY[i] / sump[i] - trees[i].y,2))
+	   << " " << atan2(sumpY[i] / sump[i] - trees[i].y, sumpX[i] / sump[i] - trees[i].x)
+	   << " " << (sumd[i] / sump[i]) / (2./3. * sqrt(area) / M_PI)
+	   << endl;
     }
   }
 
@@ -440,14 +469,15 @@ int main(int argc, char *argv[]) {
 	    ++line;
 	  }
 	  while(!treesInSample.empty()) {
-    sump[treesInSample.top().first] += treesInSample.top().second / sInfl;
+   sump[treesInSample.top().first] += treesInSample.top().second / sInfl;
 	    treesInSample.pop();}
  	}
       }
     }
     sump *= dxy*dxy;
     for(size_t i=0; i < trees.size(); ++i) {
-      cout << trees[i].nr << " " << pow(trees[i].d/2.,2)*M_PI/sump[i] << endl;
+      cout << trees[i].nr << " " << pow(trees[i].d/2.,2)*M_PI/sump[i]
+	   << endl;
     }
   }
 
