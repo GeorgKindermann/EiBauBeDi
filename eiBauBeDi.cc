@@ -345,11 +345,27 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  //Overlaping circles
+  //Overlapping circles at the position of each tree
   {
-    
-
-    return(0);
+    cout << "\nBasal area from overlaping circles around each tree" << endl;
+    cout << "tree g/ha" << endl;
+    valarray<double> sumg(0., trees.size());
+    size_t line = 0;
+    for(auto&& i : trees) {
+      for(auto&& j : trees) {
+	//double dist = hypot(i.x - j.x, i.y - j.y);
+	double dist = sqrt(pow(i.x - j.x,2) + pow(i.y - j.y,2));
+	double aoverlap = EiBauBeDi::circleCircleIntersectionArea(dist, i.d/4., j.d/4.);
+	if(aoverlap > 0.) {
+	  double weight = 1./EiBauBeDi::wgtCircC(EiBauBeDi::point{i.x,i.y}, dist, plotCorners);
+	  sumg[line] += weight * aoverlap * 4.;
+	}
+      }
+      ++line;
+    }
+    for(size_t i=0; i < trees.size(); ++i) {
+      cout << trees[i].nr << " " << sumg[i]/pow(trees[i].d/4.,2)/M_PI << endl;
+    }
   }
 
   //Fix sample plot at systematic rasterpoints
