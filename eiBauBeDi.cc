@@ -27,6 +27,7 @@
 #include <iterator>
 #include <valarray>
 #include <stack>
+#include <numeric>
 
 #ifndef M_PI
 #define M_PI 3.141592653589793238462643383279502884L
@@ -176,6 +177,9 @@ namespace EiBauBeDi {
     } else {wgt = 0.;}
     return(wgt);
   }
+
+  //Share of circle area inside polygon
+  //...
   
 }
 
@@ -286,6 +290,41 @@ int main(int argc, char *argv[]) {
     }
     for(size_t i=0; i < trees.size(); ++i) {
       cout << trees[i].nr << " " << sumg[i] << endl;
+    }
+  }
+
+  //Variable angle count at the position of each tree
+  {
+    cout << "\nBasal area from variable angle count sample around each tree" << endl;
+    cout << "tree g/ha" << endl;
+    double min = 1./4.; //minimum distance factor
+    valarray<double> gha(0., trees.size());
+    for(size_t i=0; i<trees.size(); ++i) {
+      vector<double> k2;
+      k2.reserve(trees.size());
+      for(size_t j=0; j<trees.size(); ++j) {
+	double dist2 = pow(trees[i].x - trees[j].x, 2) + pow(trees[i].y - trees[j].y, 2);
+	k2.push_back(dist2/pow(trees[j].d/2.,2));
+      }
+      vector<size_t> idx(k2.size());
+      iota(idx.begin(), idx.end(), 0);
+      sort(idx.begin(), idx.end(), [&k2](size_t i1, size_t i2) {return k2[i1] < k2[i2];});
+      double sum1g = 0.;
+      double sumN = 0.;
+      for(size_t j=0; j<idx.size(); ++j) {
+	if(k2[idx[j]] > min) {break;
+	} else {
+	  double dist2 = pow(trees[i].x - trees[idx[j]].x, 2) + pow(trees[i].y - trees[idx[j]].y, 2);
+	  double weight = 1./EiBauBeDi::wgtCircC(EiBauBeDi::point{trees[i].x,trees[i].y}, sqrt(dist2), plotCorners);
+	  sumN += weight;
+	  double zf = sumN - weight/2.;
+	  sum1g += dist2/pow(trees[j].d/2.,2) / zf;
+	}
+      }
+      gha[i] = 1. / (sum1g / sumN);
+    }
+    for(size_t i=0; i < trees.size(); ++i) {
+      cout << trees[i].nr << " " << gha[i] << endl;
     }
   }
 
