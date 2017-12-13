@@ -64,6 +64,23 @@ namespace EiBauBeDi {
     return(abs(area));
   }
 
+  double circleCircleIntersectionArea(const double &distance, const double &r0, const double &r1) {
+    double ret = 0.;
+    if(distance < r0 + r1) { //overlap
+      if(distance <= abs(r0 - r1)) { //One totaly insede the other
+	ret = M_PI * pow(min(r0, r1), 2);
+      } else { //Partly overlap
+	double r02 = pow(r0, 2);
+	double r12 = pow(r1, 2);
+	double x = (r02 - r12 + pow(distance, 2)) / (2. * distance);
+	double z = pow(x, 2);
+	double y = sqrt(r02 - z);
+	ret = r02 * asin(y / r0) + r12 * asin(y / r1) - y * (x + sqrt(z + r12 - r02));
+      }
+    }
+    return(ret);
+  }
+  
   //tests if a point is Left|On|Right of an infinite line.
   //  >0 for P2 left of the line through P0 and P1, 0 for P2  on the line,
   //  <0 for P2  right of the line
@@ -326,6 +343,13 @@ int main(int argc, char *argv[]) {
     for(size_t i=0; i < trees.size(); ++i) {
       cout << trees[i].nr << " " << gha[i] << endl;
     }
+  }
+
+  //Overlaping circles
+  {
+    
+
+    return(0);
   }
 
   //Fix sample plot at systematic rasterpoints
