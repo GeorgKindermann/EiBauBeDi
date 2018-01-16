@@ -28,6 +28,7 @@
 #include <valarray>
 #include <stack>
 #include <numeric>
+#include <tuple>
 
 #ifndef M_PI
 #define M_PI 3.141592653589793238462643383279502884L
@@ -38,6 +39,7 @@ using namespace std;
 namespace EiBauBeDi {
 
   struct point {
+    bool operator==(const point& rhs) const {return tie(x,y) == tie(rhs.x, rhs.y);}
     double x{0.};
     double y{0.};
   };
@@ -175,29 +177,22 @@ namespace EiBauBeDi {
 	sort(rad.begin(), rad.end());
 	auto last = unique(rad.begin(), rad.end());
 	rad.erase(last, rad.end());
-	double sum = 0.;
 	double sumIn = 0.;
-	{
-	  vector<double>::const_iterator previous = prev(rad.end());
-	  double between = *previous + (*rad.begin() - *previous)/2.;
-	  bool inPlot = EiBauBeDi::pointInPolyCN(EiBauBeDi::point{pkt.x + radius * cos(between), pkt.y + radius * sin(between)}, polygon);
-	  for(vector<double>::const_iterator current = rad.begin(); current != rad.end(); ++current) {
-	    double tmp = fmod(*current - *previous + M_PI * 2., M_PI * 2.);
-	    sum += tmp;
-	    if(inPlot) {sumIn += tmp;}
-	    inPlot = !inPlot;
-	    previous = current;
-	  }
+	vector<double>::const_iterator previous = prev(rad.end());
+	double between = *previous + (*rad.begin() - *previous)/2.;
+	bool inPlot = EiBauBeDi::pointInPolyCN(EiBauBeDi::point{pkt.x + radius * cos(between), pkt.y + radius * sin(between)}, polygon);
+	for(vector<double>::const_iterator current = rad.begin(); current != rad.end(); ++current) {
+	  double tmp = fmod(*current - *previous + M_PI * 2., M_PI * 2.);
+	  if(inPlot) {sumIn += tmp;}
+	  inPlot = !inPlot;
+	  previous = current;
 	}
-	if(sum > 0.) {wgt = sumIn/sum;}  //sum should be M_PI * 2.
+	wgt = sumIn/(2. * M_PI);
       }
     } else {wgt = 0.;}
     return(wgt);
   }
 
-  //Share of circle area inside polygon
-  //...
-  
 }
 
 int main(int argc, char *argv[]) {
@@ -520,7 +515,7 @@ int main(int argc, char *argv[]) {
     }
   }
 
-    //assign plot area to trees - Share pixel between trees
+  //assign plot area to trees - Share pixel between trees
   {
     cout << "\nBasal area from single tree growing shared area on raster" << endl;
     cout << "tree g/ha" << endl;
