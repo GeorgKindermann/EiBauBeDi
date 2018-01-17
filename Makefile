@@ -1,7 +1,10 @@
 CC = g++ -Wall -O3 -funroll-loops -march=native -mtune=native
 
-all:	eiBauBeDi
+all:	eiBauBeDi.o testEiBauBeDi
 
-eiBauBeDi:	eiBauBeDi.cc
-	$(CC) eiBauBeDi.cc -oeiBauBeDi
-	strip eiBauBeDi
+eiBauBeDi.o:	eiBauBeDi.cc eiBauBeDi.h
+	$(CC) eiBauBeDi.cc -c
+
+testEiBauBeDi:	testEiBauBeDi.cc eiBauBeDi.o
+	$(CC) testEiBauBeDi.cc -otestEiBauBeDi eiBauBeDi.o
+	strip testEiBauBeDi

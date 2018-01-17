@@ -1,6 +1,6 @@
 // eiBauBeDi 0.1a, EInzelBAUmBEstandesDIchte - Single Tree Stand Density
 // Programm to calculte the stand density of singe trees in a forest stand
-// Copyright (C) 2017 Georg Kindermann
+// Copyright (C) 2017-2018 Georg Kindermann
 // Home: https://github.com/GeorgKindermann/EiBauBeDi
 
 // This program is free software: you can redistribute it and/or modify
@@ -15,173 +15,129 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>
 
-#include <iostream>
-#include <fstream>
-#include <string>
-#include <vector>
-#include <array>
-#include <algorithm>
-#include <sstream>
-#include <iterator>
-#include <cmath>
-#include <iterator>
-#include <valarray>
-#include <stack>
-#include <numeric>
-#include <tuple>
+#include "eiBauBeDi.h"
 
 #ifndef M_PI
 #define M_PI 3.141592653589793238462643383279502884L
 #endif
 
-using namespace std;
-
 namespace EiBauBeDi {
 
-  struct point {
-    bool operator==(const point& rhs) const {return tie(x,y) == tie(rhs.x, rhs.y);}
-    double x{0.};
-    double y{0.};
-  };
+  polygon::polygon(const std::vector<std::pair<double, double> > &cornerPoints){
+    updateCornerPoints(cornerPoints);
+  }
   
-  struct tree {
-    string nr{""}; //tree indentifier
-    double x{0.}; //x Position
-    double y{0.}; //y Position
-    double z{0.}; //z Position
-    double d{0.}; //Diameter
-    double h{0.}; //Height
-    double hcr{0.}; //Height of the crown base
-  };
+  size_t polygon::updateCornerPoints(const std::vector<std::pair<double, double> > &cornerPoints) {
+    corners.clear();
+    corners.reserve(cornerPoints.size());
+    for(auto&& i : cornerPoints) {
+      corners.push_back(point{i.first, i.second});
+    }
+    return(corners.size());
+  }
 
-  double polygonArea(const vector<point>& polygon) {
+  double polygon::getArea() {
     double area = 0.;
-    vector<point>::const_iterator previous = prev(polygon.end());
-    for(vector<point>::const_iterator current = polygon.begin(); current != polygon.end(); ++current) {
+    std::vector<point>::const_iterator previous = std::prev(corners.end());
+    for(std::vector<point>::const_iterator current = corners.begin(); current != corners.end(); ++current) {
       area += previous->x * current->y;
       area -= previous->y * current->x;
       previous = current;
     }
     area /= 2.;
-    return(abs(area));
+    return(std::abs(area));
   }
 
-  double circleCircleIntersectionArea(const double &distance, const double &r0, const double &r1) {
-    double ret = 0.;
-    if(distance < r0 + r1) { //overlap
-      if(distance <= abs(r0 - r1)) { //One totaly insede the other
-	ret = M_PI * pow(min(r0, r1), 2);
-      } else { //Partly overlap
-	double r02 = pow(r0, 2);
-	double r12 = pow(r1, 2);
-	double x = (r02 - r12 + pow(distance, 2)) / (2. * distance);
-	double z = pow(x, 2);
-	double y = sqrt(r02 - z);
-	ret = r02 * asin(y / r0) + r12 * asin(y / r1) - y * (x + sqrt(z + r12 - r02));
-      }
-    }
-    return(ret);
-  }
-  
-  //tests if a point is Left|On|Right of an infinite line.
-  //  >0 for P2 left of the line through P0 and P1, 0 for P2  on the line,
-  //  <0 for P2  right of the line
-  int isLeft(const point &p0, const point &p1, const point &p2) {
+  int polygon::isLeft(const point &p0, const point &p1, const point &p2) {
     return ((p1.x - p0.x) * (p2.y - p0.y) - (p2.x - p0.x) * (p1.y - p0.y));}
 
-  //winding number test for a point in a polygon
-  //  0 (false) = outside, 1 (true) = inside
-  bool pointInPolyWN(const point &pkt, const vector<point> &polygon) {
+  bool polygon::pointInPolyWN(const double &x, const double &y) {
     int nw = 0; //Number of windings
-    vector<point>::const_iterator previous = prev(polygon.end());
-    for(vector<point>::const_iterator current = polygon.begin(); current != polygon.end(); ++current) {
-      if(previous->y <= pkt.y) {
-	if(current->y > pkt.y) {
-	  if(isLeft(*previous, *current, pkt) > 0) {++nw;}
+    std::vector<point>::const_iterator previous = prev(corners.end());
+    for(std::vector<point>::const_iterator current = corners.begin(); current != corners.end(); ++current) {
+      if(previous->y <= y) {
+	if(current->y > y) {
+	  if(isLeft(*previous, *current, point{x, y}) > 0) {++nw;}
 	}
       } else {
-	if(current->y <= pkt.y) {
-	  if(isLeft(*previous, *current, pkt) < 0) {--nw;}
+	if(current->y <= y) {
+	  if(isLeft(*previous, *current, point{x, y}) < 0) {--nw;}
 	}
       }
       previous = current;
     }
     return(abs(nw) % 2);
   }
-  
-  //crossing number test for a point in a polygon
-  //  0 (false) = outside, 1 (true) = inside
-  bool pointInPolyCN(const point &pkt, const vector<point> &polygon) {
+
+  bool polygon::pointInPolyCN(const double &x, const double &y) {
     int nx = 0; //Number of crossings
-    vector<point>::const_iterator previous = prev(polygon.end());
-    for(vector<point>::const_iterator current = polygon.begin(); current != polygon.end(); ++current) {
-      if(((previous->y <= pkt.y) && (current->y > pkt.y))
-	 || ((previous->y > pkt.y) && (current->y <= pkt.y))) {
-	double xc = (pkt.y - previous->y) / (current->y - previous->y);
-	if(pkt.x < previous->x + xc * (current->x - previous->x)) {++nx;}
+    std::vector<point>::const_iterator previous = std::prev(corners.end());
+    for(std::vector<point>::const_iterator current = corners.begin(); current != corners.end(); ++current) {
+      if(((previous->y <= y) && (current->y > y))
+	 || ((previous->y > y) && (current->y <= y))) {
+	double xc = (y - previous->y) / (current->y - previous->y);
+	if(x < previous->x + xc * (current->x - previous->x)) {++nx;}
       }
       previous = current;
     }
     return(nx % 2);
   }
-
-  //Points where line cuts a circle
-  vector<point> cutLineCircle(const point &a0, const point &a1,
-			      const point &c, const double &r) {
-    vector<point> ret;
+  
+  std::vector<EiBauBeDi::polygon::point> polygon::cutLineCircle(const point &a0, const point &a1, const point &c, const double &r) {
+    std::vector<point> ret;
     double dx = a1.x - a0.x;
     double dy = a1.y - a0.y;
-    double dr = sqrt(pow(dx, 2) + pow(dy,2));
+    double dr = std::sqrt(pow(dx, 2) + pow(dy,2));
     double D = (a0.x - c.x) * (a1.y - c.y) - (a1.x - c.x) * (a0.y - c.y);
-    double incidence = pow(r,2) * pow(dr,2) - pow(D,2);
+    double incidence = std::pow(r,2) * std::pow(dr,2) - std::pow(D,2);
     if(incidence > 0) { //==0 .. tangent is not needed here
-      array<double, 2> x{};
-      array<double, 2> y{};
-      double tt = sqrt(incidence);
-      x[0] = c.x + (D*dy + copysign(1.0, dy) * dx * tt) / pow(dr,2);
-      x[1] = c.x + (D*dy - copysign(1.0, dy) * dx * tt) / pow(dr,2);
-      y[0] = c.y + (-D*dx + abs(dy) * tt) / pow(dr,2);
-      y[1] = c.y + (-D*dx - abs(dy) * tt) / pow(dr,2);
+      std::array<double, 2> x{};
+      std::array<double, 2> y{};
+      double tt = std::sqrt(incidence);
+      x[0] = c.x + (D*dy + std::copysign(1.0, dy) * dx * tt) / std::pow(dr,2);
+      x[1] = c.x + (D*dy - std::copysign(1.0, dy) * dx * tt) / std::pow(dr,2);
+      y[0] = c.y + (-D*dx + std::abs(dy) * tt) / std::pow(dr,2);
+      y[1] = c.y + (-D*dx - std::abs(dy) * tt) / std::pow(dr,2);
       for(int i=0; i<2; ++i) {
-	if(x[i] >= min(a0.x, a1.x) && x[i] <= max(a0.x, a1.x) &&
-	   y[i] >= min(a0.y, a1.y) && y[i] <= max(a0.y, a1.y)) {
+	if(x[i] >= std::min(a0.x, a1.x) && x[i] <= std::max(a0.x, a1.x) &&
+	   y[i] >= std::min(a0.y, a1.y) && y[i] <= std::max(a0.y, a1.y)) {
 	  ret.push_back(point{x[i], y[i]});}
       }
     }
     return(ret);
   }
-  
-  //Share of circle circumference inside polygon
-  double wgtCircC(const point &pkt, const double &radius, const vector<point> &polygon) {
+
+    //Share of circle circumference inside polygon
+  double polygon::shareInside(const double &x, const double &y, const double &radius) {
     double wgt = 1.;
     //polygon is totaly inside the circle
     unsigned int nPointsOutside = 0;
-    double r2 = pow(radius,2);
-    for(auto&& i : polygon) {
-      double dist2 = pow(i.x - pkt.x, 2) + pow(i.y - pkt.y, 2);
+    double r2 = std::pow(radius,2);
+    for(auto&& i : corners) {
+      double dist2 = std::pow(i.x - x, 2) + std::pow(i.y - y, 2);
       if(dist2 > r2) {++nPointsOutside;}
     }
     if(nPointsOutside > 0) {
-      vector<point> cutPoint;
+      std::vector<point> cutPoint;
       {
-	vector<point>::const_iterator previous = prev(polygon.end());
-	for(vector<point>::const_iterator current = polygon.begin(); current != polygon.end(); ++current) {
-	  vector<point> tmp = cutLineCircle(*previous, *current, pkt, radius);
+	std::vector<point>::const_iterator previous = std::prev(corners.end());
+	for(std::vector<point>::const_iterator current = corners.begin(); current != corners.end(); ++current) {
+	  std::vector<point> tmp = cutLineCircle(*previous, *current, point{x, y}, radius);
 	  cutPoint.insert(cutPoint.end(), tmp.begin(), tmp.end());
 	  previous = current;
 	}
       }
       if(cutPoint.size() > 1) {
-	vector<double> rad;
-	for(auto&& i : cutPoint) {rad.push_back(atan2(pkt.y-i.y, pkt.x-i.x));}
-	sort(rad.begin(), rad.end());
-	auto last = unique(rad.begin(), rad.end());
+	std::vector<double> rad;
+	for(auto&& i : cutPoint) {rad.push_back(atan2(y-i.y, x-i.x));}
+	std::sort(rad.begin(), rad.end());
+	auto last = std::unique(rad.begin(), rad.end());
 	rad.erase(last, rad.end());
 	double sumIn = 0.;
-	vector<double>::const_iterator previous = prev(rad.end());
+	std::vector<double>::const_iterator previous = std::prev(rad.end());
 	double between = *previous + (*rad.begin() - *previous)/2.;
-	bool inPlot = EiBauBeDi::pointInPolyCN(EiBauBeDi::point{pkt.x + radius * cos(between), pkt.y + radius * sin(between)}, polygon);
-	for(vector<double>::const_iterator current = rad.begin(); current != rad.end(); ++current) {
+	bool inPlot = pointInPolyCN(x + radius * cos(between), y + radius * sin(between));
+	for(std::vector<double>::const_iterator current = rad.begin(); current != rad.end(); ++current) {
 	  double tmp = fmod(*current - *previous + M_PI * 2., M_PI * 2.);
 	  if(inPlot) {sumIn += tmp;}
 	  inPlot = !inPlot;
@@ -193,263 +149,118 @@ namespace EiBauBeDi {
     return(wgt);
   }
 
+  std::array<double, 4> polygon::getExtends() {
+    std::array<double, 4> ret = {corners[0].x, corners[0].x, corners[0].y, corners[0].y};
+    for(auto&& i : corners) {
+      ret[0] = std::min(ret[0], i.x); ret[1] = std::max(ret[1], i.x);
+      ret[2] = std::min(ret[2], i.y); ret[3] = std::max(ret[3], i.y);
+    }
+    return(ret);
+  }
+
+  
+  tree::tree() : nr(""), x(0.), y(0.), z(0.), d(0.), h(0.), hcr(0.), impact(0.), influence0(0.), influence1(0.) {}
+  
+  tree::tree(const std::string &anr, const double &ax, const double &ay, const double &az, const double &ad, const double &ah, const double &ahcr, const double &aimpact, const double &ainfluence0, const double &ainfluence1) : nr(anr), x(ax), y(ay), z(az), d(ad), h(ah), hcr(ahcr), impact(aimpact), influence0(ainfluence0), influence1(ainfluence1) {}
+
+  double tree::getWeight(const double &px, const double &py, double f(const double &dx, const double &dy, const double &influence0, const double &influence1)) {
+    return(f(px-x, py-y, influence0, influence1));
+  }
+
+  
+  forestStand::forestStand(const std::vector<std::pair<double, double> > &cornerPoints) :
+    poly(cornerPoints) {}
+
+  double forestStand::getImpactSum() {
+    double sum = 0.;
+    for(auto&& i : trees) {sum += i.impact;}
+    return(sum);
+  }
+
+  double forestStand::subsamplePoint(const double &px, const double &py, double f(const double &dx, const double &dy, const double &influence0, const double &influence1), const bool &makeBorderCorrection) {
+    double sum=0.;
+    for(auto&& i : trees) {
+      double wgt = f(i.x-px, i.y-py, i.influence0, i.influence1);
+      if(wgt > 0.) {
+	double borderCor = 1.;
+	if(makeBorderCorrection) {
+	  borderCor /= poly.shareInside(px, py, sqrt(pow(i.x-px,2) + pow(i.y-py,2)));}
+	sum += i.impact * wgt + borderCor;
+      }
+    }
+    return(sum);
+  }
+
+  double circleCircleIntersectionArea(const double &distance, const double &r0, const double &r1) {
+    double ret = 0.;
+    if(distance < r0 + r1) { //overlap
+      if(distance <= std::abs(r0 - r1)) { //One totaly insede the other
+	ret = M_PI * std::pow(std::min(r0, r1), 2);
+      } else { //Partly overlap
+	double r02 = std::pow(r0, 2);
+	double r12 = std::pow(r1, 2);
+	double x = (r02 - r12 + std::pow(distance, 2)) / (2. * distance);
+	double z = std::pow(x, 2);
+	double y = std::sqrt(r02 - z);
+	ret = r02 * std::asin(y / r0) + r12 * std::asin(y / r1) - y * (x + std::sqrt(z + r12 - r02));
+      }
+    }
+    return(ret);
+  }
+
+  double forestStand::subsampleCircle(const double &px, const double &py, const double &r, const bool &makeBorderCorrection) {
+    double sum=0.;
+    for(auto&& i : trees) {
+      double dist = sqrt(pow(i.x - px,2) + pow(i.y - py,2));
+      double aoverlap = circleCircleIntersectionArea(dist, i.influence0, r);
+	if(aoverlap > 0.) {
+	  double borderCor = 1.;
+	  if(makeBorderCorrection) {
+	    borderCor /= poly.shareInside(px, py, sqrt(pow(i.x-px,2) + pow(i.y-py,2)));}
+	  sum += i.impact * aoverlap * borderCor;
+	}
+    }
+    sum /= pow(r,2) * M_PI;
+    return(sum);
+  }
+
+  std::valarray<double> forestStand::subsamplePointTree(const double &px, const double &py, double f(const double &dx, const double &dy, const double &influence0, const double &influence1), const bool &makeBorderCorrection) {
+    std::valarray<double> ret(0., trees.size());
+    double sum=0.;
+    for(size_t j=0; j<trees.size(); ++j) {
+      auto&& i = trees[j];
+      double wgt = f(i.x-px, i.y-py, i.influence0, i.influence1);
+      if(wgt > 0.) {
+	ret[j] = 1.;
+	double borderCor = 1.;
+	if(makeBorderCorrection) {
+	  borderCor /= poly.shareInside(px, py, sqrt(pow(i.x-px,2) + pow(i.y-py,2)));}
+	sum += i.impact * wgt + borderCor;
+      }
+    }
+    ret *= sum;
+    return(ret);
+  }
+
+  std::valarray<double> forestStand::influencePoint(const double &px, const double &py, double f(const double &dx, const double &dy, const double &influence0, const double &influence1), const bool &makeBorderCorrection) {
+    std::valarray<double> ret(0., trees.size());
+    for(size_t j=0; j<trees.size(); ++j) {
+      auto&& i = trees[j];
+      double wgt = f(i.x-px, i.y-py, i.influence0, i.influence1);
+      if(wgt > 0.) {
+	double borderCor = 1.;
+	if(makeBorderCorrection) {
+	  borderCor /= poly.shareInside(px, py, sqrt(pow(i.x-px,2) + pow(i.y-py,2)));}
+	ret[j] += i.impact * wgt + borderCor;
+      }
+    }
+    return(ret);
+  }
+
+ 
 }
 
-int main(int argc, char *argv[]) {
-  string FileInCorners = "./data/corners.txt";
-  string FileInTrees = "./data/trees.txt";
-  string FileOutTrees = "./result/standDensity.txt";
-  if(argc == 4) {
-    FileInCorners = argv[1];
-    FileInTrees = argv[2];
-    FileOutTrees = argv[3];
-  }
-  
-  //Read in the plot corners
-  vector<EiBauBeDi::point> plotCorners;
-  {
-    vector<array<double, 3> > tmpPlotCorners; //cornerNumber x y
-    ifstream infile(FileInCorners);
-    string line;
-    while (getline(infile, line)) {
-      if(line[0] == '#') continue;
-      istringstream iss(line);
-      string plotNr;
-      double cornerNumber, x, y;
-      if (!(iss >> plotNr >> cornerNumber >> x >> y)) {break;} //Read error
-      tmpPlotCorners.push_back(array<double, 3>{cornerNumber, x, y});
-    }
-    sort(tmpPlotCorners.begin(), tmpPlotCorners.end());
-    for(auto&& i : tmpPlotCorners) {plotCorners.push_back(EiBauBeDi::point{i[1],i[2]});}
-  }
-  //for(auto&& i : plotCorners) cout << i.x << " " << i.y << endl;
-
-  //Read in the tree data
-  vector<EiBauBeDi::tree> trees;
-  {
-    ifstream infile(FileInTrees);
-    string line;
-    while (getline(infile, line)) {
-      if(line[0] == '#') continue;
-      istringstream iss(line);
-      vector<string> tokens{istream_iterator<string>{iss},
-	  istream_iterator<string>{}};
-      if(EiBauBeDi::pointInPolyCN(EiBauBeDi::point{stod(tokens[2]),stod(tokens[3])}, plotCorners)) { //Use only trees which are inside the plot
-	EiBauBeDi::tree tree;
-	tree.nr = tokens[1];
-	tree.x = stod(tokens[2]);
-	tree.y = stod(tokens[3]);
-	tree.z = stod(tokens[4]);
-	tree.d = stod(tokens[6]);
-	tree.h = stod(tokens[7]);
-	tree.hcr = stod(tokens[8]);
-	trees.push_back(tree);
-      }
-    }
-  }
-  //for(auto&& i : trees) {cout << i.nr << " " << i.x << endl;}
-
-  //Basal area of the plot
-  {
-    double sumg = 0.;
-    for(auto&& i : trees) {sumg += pow(i.d,2);}
-    sumg *= M_PI / 4.;
-    cout << "Basal area [m2/ha]: " << sumg / polygonArea(plotCorners) << endl;
-  }
-
-  //Fix sample plot at the position of each tree
-  {
-    cout << "\nBasal area from fixed sample plot around each tree" << endl;
-    cout << "tree g/ha" << endl;
-    double r = 7.; //Sample Radius
-    valarray<double> sumg(0., trees.size());
-    double r2 = pow(r, 2);
-    size_t line = 0;
-    for(auto&& i : trees) {
-      for(auto&& j : trees) {
-	double dist2 = pow(i.x - j.x, 2) + pow(i.y - j.y, 2);
-	if(dist2 <= r2) {
-	  //Plot border correction
-	  double weight = 1./EiBauBeDi::wgtCircC(EiBauBeDi::point{i.x,i.y}, sqrt(dist2), plotCorners);
-	  sumg[line] += pow(j.d,2) * weight;
-	}
-      }
-      ++line;
-    }
-    sumg /= 4.*r2;
-    for(size_t i=0; i < trees.size(); ++i) {
-      cout << trees[i].nr << " " << sumg[i] << endl;
-    }
-  }
-
-  //Angle count at the position of each tree
-  {
-    cout << "\nBasal area from angle count sample around each tree" << endl;
-    cout << "tree g/ha" << endl;
-    double k = 4.; //counting factor
-    valarray<double> sumg(0., trees.size());
-    size_t line = 0;
-    for(auto&& i : trees) {
-      for(auto&& j : trees) {
-	double dist2 = pow(i.x - j.x, 2) + pow(i.y - j.y, 2);
-	if(dist2 <= 2500 * pow(j.d/100., 2) / k) {
-	  //Plot border correction
-	  double weight = 1./EiBauBeDi::wgtCircC(EiBauBeDi::point{i.x,i.y}, sqrt(dist2), plotCorners);
-	  sumg[line] += k * weight;
-	}
-      }
-      ++line;
-    }
-    for(size_t i=0; i < trees.size(); ++i) {
-      cout << trees[i].nr << " " << sumg[i] << endl;
-    }
-  }
-
-  //Variable angle count at the position of each tree
-  {
-    cout << "\nBasal area from variable angle count sample around each tree" << endl;
-    cout << "tree g/ha" << endl;
-    double min = 1./4.; //minimum distance factor
-    valarray<double> gha(0., trees.size());
-    for(size_t i=0; i<trees.size(); ++i) {
-      vector<double> k2;
-      k2.reserve(trees.size());
-      for(size_t j=0; j<trees.size(); ++j) {
-	double dist2 = pow(trees[i].x - trees[j].x, 2) + pow(trees[i].y - trees[j].y, 2);
-	k2.push_back(dist2/pow(trees[j].d/2.,2));
-      }
-      vector<size_t> idx(k2.size());
-      iota(idx.begin(), idx.end(), 0);
-      sort(idx.begin(), idx.end(), [&k2](size_t i1, size_t i2) {return k2[i1] < k2[i2];});
-      double sum1g = 0.;
-      double sumN = 0.;
-      for(size_t j=0; j<idx.size(); ++j) {
-	if(k2[idx[j]] > min) {break;
-	} else {
-	  double dist2 = pow(trees[i].x - trees[idx[j]].x, 2) + pow(trees[i].y - trees[idx[j]].y, 2);
-	  double weight = 1./EiBauBeDi::wgtCircC(EiBauBeDi::point{trees[i].x,trees[i].y}, sqrt(dist2), plotCorners);
-	  sumN += weight;
-	  double zf = sumN - weight/2.;
-	  sum1g += dist2/pow(trees[j].d/2.,2) / zf;
-	}
-      }
-      gha[i] = 1. / (sum1g / sumN);
-    }
-    for(size_t i=0; i < trees.size(); ++i) {
-      cout << trees[i].nr << " " << gha[i] << endl;
-    }
-  }
-
-  //Overlapping circles at the position of each tree
-  {
-    cout << "\nBasal area from overlaping circles around each tree" << endl;
-    cout << "tree g/ha" << endl;
-    valarray<double> sumg(0., trees.size());
-    size_t line = 0;
-    for(auto&& i : trees) {
-      for(auto&& j : trees) {
-	//double dist = hypot(i.x - j.x, i.y - j.y);
-	double dist = sqrt(pow(i.x - j.x,2) + pow(i.y - j.y,2));
-	double aoverlap = EiBauBeDi::circleCircleIntersectionArea(dist, i.d/4., j.d/4.);
-	if(aoverlap > 0.) {
-	  double weight = 1./EiBauBeDi::wgtCircC(EiBauBeDi::point{i.x,i.y}, dist, plotCorners);
-	  sumg[line] += weight * aoverlap * 4.;
-	}
-      }
-      ++line;
-    }
-    for(size_t i=0; i < trees.size(); ++i) {
-      cout << trees[i].nr << " " << sumg[i]/pow(trees[i].d/4.,2)/M_PI << endl;
-    }
-  }
-
-  //Fix sample plot at systematic rasterpoints
-  {
-    cout << "\nBasal area from fixed sample plot on raster" << endl;
-    cout << "tree g/ha" << endl;
-    //Find plot extends
-    EiBauBeDi::point plu = {plotCorners[0].x,plotCorners[0].y};
-    EiBauBeDi::point pro = {plotCorners[0].x,plotCorners[0].y};
-    for(auto&& i : plotCorners) {
-      plu.x = min(plu.x, i.x); plu.y = min(plu.y, i.y);
-      pro.x = max(pro.x, i.x); pro.y = max(pro.y, i.y);
-    }
-    double r = 7.; //Sample Radius
-    double r2 = pow(r, 2);
-    double dxy = 0.1; //Distance between raster points
-    valarray<double> sumg(0., trees.size());
-    valarray<unsigned int> nSamples(0u, trees.size());
-    for(double x = plu.x - r; x <= pro.x + r; x += dxy) {
-      for(double y = plu.y - r; y <= pro.y + r; y += dxy) {
-	bool insidePlot =
-	  EiBauBeDi::pointInPolyCN(EiBauBeDi::point{x, y}, plotCorners);
-	double sg = 0.;  //Basal area of this sample
-	stack<size_t> treesInSample;
-	size_t line = 0;
-	for(auto&& i : trees) {
-	  if(pow(i.x - x, 2) + pow(i.y - y, 2) <= r2) {
-	    sg += pow(i.d,2);
-	    treesInSample.push(line);
-	    if(insidePlot) {++nSamples[line];}
-	  }
-	  ++line;
-	}
-	while(!treesInSample.empty()) {
-	  sumg[treesInSample.top()] += sg;
-	  treesInSample.pop();}
-      }
-    }
-    sumg /= 4.*r2;
-    //sumg /= nSamples;  //Different types
-    for(size_t i=0; i<sumg.size(); ++i) {sumg[i] /= nSamples[i];}
-    for(size_t i=0; i < trees.size(); ++i) {
-      cout << trees[i].nr << " " << sumg[i] << endl;}
-  }
-
-  //Fix sample plot at systematic rasterpoints
-  //Weightened with the distance between tree and sample center
-  {
-    cout << "\nBasal area from weightened fixed sample plot on raster" << endl;
-    cout << "tree g/ha" << endl;
-    //Find plot extends
-    EiBauBeDi::point plu = {plotCorners[0].x,plotCorners[0].y};
-    EiBauBeDi::point pro = {plotCorners[0].x,plotCorners[0].y};
-    for(auto&& i : plotCorners) {
-      plu.x = min(plu.x, i.x); plu.y = min(plu.y, i.y);
-      pro.x = max(pro.x, i.x); pro.y = max(pro.y, i.y);
-    }
-    double r = 7.; //Sample Radius
-    double r2 = pow(r, 2);
-    double dxy = 0.1; //Distance between raster points
-    valarray<double> sumg(0., trees.size());
-    valarray<double> sumWeight(0., trees.size());
-    for(double x = plu.x - r; x <= pro.x + r; x += dxy) {
-      for(double y = plu.y - r; y <= pro.y + r; y += dxy) {
-	bool insidePlot =
-	  EiBauBeDi::pointInPolyCN(EiBauBeDi::point{x, y}, plotCorners);
-	double sg = 0.;  //Basal area of this sample
-	stack<pair<size_t, double> > treesInSample; //idx, distance
-	size_t line = 0;
-	for(auto&& i : trees) {
-	  double dist2 = pow(i.x - x, 2) + pow(i.y - y, 2);
-	  if(dist2 <= r2) {
-	    double wgt = 1. - sqrt(dist2) / r;
-	    sg += pow(i.d,2);
-	    treesInSample.push(make_pair(line, wgt));
-	    if(insidePlot) {sumWeight[line] += wgt;}
-	  }
-	  ++line;
-	}
-	while(!treesInSample.empty()) {
-	  sumg[treesInSample.top().first] += sg * treesInSample.top().second;
-	  treesInSample.pop();}
-      }
-    }
-    sumg /= 4.*r2*sumWeight;
-    for(size_t i=0; i < trees.size(); ++i) {
-      cout << trees[i].nr << " " << sumg[i] << endl;}
-  }
-
+/*
   //assign plot area to trees - Winner takes it all
   {
     cout << "\nBasal area from single tree growing area on raster" << endl;
@@ -515,45 +326,6 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  //assign plot area to trees - Share pixel between trees
-  {
-    cout << "\nBasal area from single tree growing shared area on raster" << endl;
-    cout << "tree g/ha" << endl;
-    //Find plot extends
-    EiBauBeDi::point plu = {plotCorners[0].x,plotCorners[0].y};
-    EiBauBeDi::point pro = {plotCorners[0].x,plotCorners[0].y};
-    for(auto&& i : plotCorners) {
-      plu.x = min(plu.x, i.x); plu.y = min(plu.y, i.y);
-      pro.x = max(pro.x, i.x); pro.y = max(pro.y, i.y);
-    }
-    double dxy = 0.1; //Distance between raster points
-    double maxInfl = 0.04; //trees with higher infl are not used
-    valarray<double> sump(0., trees.size());
-    for(double x = plu.x + dxy/2.; x <= pro.x; x += dxy) {
-      for(double y = plu.y + dxy/2.; y <= pro.y; y += dxy) {
-	if(EiBauBeDi::pointInPolyCN(EiBauBeDi::point{x, y}, plotCorners)) {
-	  double sInfl = 0.; //summ of influence on this grid
-	  stack<pair<size_t, double> > treesInSample; //idx, infl
-	  size_t line = 0;
-	  for(auto&& i : trees) {
-	    double infl = (pow(i.x - x, 2) + pow(i.y - y, 2)) / pow(i.d,2);
-	    if(maxInfl > infl) {
-	      sInfl += maxInfl - infl;
-	      treesInSample.push(make_pair(line, maxInfl - infl));}
-	    ++line;
-	  }
-	  while(!treesInSample.empty()) {
-   sump[treesInSample.top().first] += treesInSample.top().second / sInfl;
-	    treesInSample.pop();}
- 	}
-      }
-    }
-    sump *= dxy*dxy;
-    for(size_t i=0; i < trees.size(); ++i) {
-      cout << trees[i].nr << " " << pow(trees[i].d/2.,2)*M_PI/sump[i]
-	   << endl;
-    }
-  }
-
-  return(0);
 }
+
+*/
