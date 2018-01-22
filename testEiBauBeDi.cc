@@ -33,24 +33,28 @@
 using namespace std;
 
 //define influence function
-double funCircle(const double &dx, const double &dy, const double &influence0, const double &influence1) {
+double funCircle(const double &px, const double &py, const EiBauBeDi::tree &tree) {
   double weight = -1.;
-  if(max(dx, dy) < influence0) {
+  double dx = tree.x - px;
+  double dy = tree.y - py;
+  if(max(dx, dy) < tree.influence0) {
     double distance = sqrt(pow(dx, 2) + pow(dy, 2));
-    if(distance <= influence0) {
-      weight = 1. / (pow(influence0, 2) * M_PI);
-      if(distance == influence0) {weight /= 2.;}
+    if(distance <= tree.influence0) {
+      weight = 1. / (pow(tree.influence0, 2) * M_PI);
+      if(distance == tree.influence0) {weight /= 2.;}
     }
   }
   return(weight);
 }
-double funCircleWgt(const double &dx, const double &dy, const double &influence0, const double &influence1) {
+double funCircleWgt(const double &px, const double &py, const EiBauBeDi::tree &tree) {
   double weight = -1.;
-  if(max(dx, dy) < influence0) {
+  double dx = tree.x - px;
+  double dy = tree.y - py;
+  if(max(dx, dy) < tree.influence0) {
     double distance = sqrt(pow(dx, 2) + pow(dy, 2));
-    if(distance <= influence0) {
-      weight = 1. / (pow(influence0, 2) * M_PI);
-      weight *= 2. * (1. - pow(distance, 2)/pow(influence0, 2));
+    if(distance <= tree.influence0) {
+      weight = 1. / (pow(tree.influence0, 2) * M_PI);
+      weight *= 2. * (1. - pow(distance, 2)/pow(tree.influence0, 2));
     }
   }
   return(weight);
@@ -135,7 +139,7 @@ int main(int argc, char *argv[]) {
     cout << i.nr << " " << gha << endl;
   }
 
-  //Variable angle count at the position of each tree
+  //Weighted angle count at the position of each tree
   cout << "\nBasal area from variable angle count sample around each tree" << endl;
   cout << "tree g/ha" << endl;
   for(auto&& i : stand.trees) {
@@ -194,7 +198,7 @@ int main(int argc, char *argv[]) {
       } else {gha[i] = 0.;}
       cout << stand.trees[i].nr << " " << gha[i] << endl;
     }
-    //Weightened with the distance between tree and sample center
+    //Weighted with the distance between tree and sample center
     cout << "\nBasal area from weightened fixed sample plot on raster" << endl;
     cout << "tree g/ha" << endl;
     gha = 0.;
@@ -213,7 +217,66 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  //assign plot area to trees - Share pixel between trees
+  //assign plot area to trees - Winner takes it all
+  //### MISSING: distanceCenter directionCenter uncircularity ###
+  cout << "\nBasal area from single tree growing area on raster" << endl;
+  cout << "tree g/ha distanceCenter directionCenter uncircularity" << endl;
+  {
+    for(auto&& i : stand.trees) {i.impact = pow(i.d/2.,2) * M_PI;}
+    for(auto&& i : stand.trees) {i.influence0 = i.d/4.;}
+    double dxy = 0.1; //Distance between raster point
+    std::array<double, 4> ext = stand.poly.getExtends();
+    ext[0] -= dxy/2.; ext[1] += dxy/2.;
+    ext[2] -= dxy/2.; ext[3] += dxy/2.;
+    std::valarray<double> tmp(0., stand.trees.size());
+    std::valarray<unsigned int> count(0U, stand.trees.size());
+    valarray<double> sumX(0., stand.trees.size());
+    valarray<double> sumY(0., stand.trees.size());
+    valarray<double> sumD(0., stand.trees.size());
+    for(double x = ext[0]; x <= ext[1]; x += dxy) {
+      for(double y = ext[2]; y <= ext[3]; y += dxy) {
+	if(stand.poly.pointInPolyCN(x, y)) {
+	  tmp = stand.influencePoint(x, y, funCircleWgt, false);
+	  auto result = std::max_element(begin(tmp), end(tmp));
+	  size_t idx = distance(begin(tmp), result);
+	  ++count[idx];
+	  sumX[idx] += x; sumY[idx] += y;
+	}
+      }
+    }
+    valarray<double> treeX(0., stand.trees.size());
+    valarray<double> treeY(0., stand.trees.size());
+    for(size_t i=0; i<count.size(); ++i) {
+      treeX[i] = stand.trees[i].x;
+      treeY[i] = stand.trees[i].y;
+      stand.trees[i].x = sumX[i] / count[i];
+      stand.trees[i].y = sumY[i] / count[i];
+    }
+    for(double x = ext[0]; x <= ext[1]; x += dxy) {
+      for(double y = ext[2]; y <= ext[3]; y += dxy) {
+	if(stand.poly.pointInPolyCN(x, y)) {
+	  tmp = stand.influencePoint(x, y, funCircleWgt, false);
+	  auto result = std::max_element(begin(tmp), end(tmp));
+	  size_t idx = distance(begin(tmp), result);
+	  sumD[idx] += sqrt(pow(stand.trees[idx].x - x, 2) + pow(stand.trees[idx].y - y, 2));
+	}
+      }
+    }
+    for(size_t i=0; i<count.size(); ++i) {
+      stand.trees[i].x = treeX[i]; stand.trees[i].y = treeY[i];}
+    for(size_t i = 0; i<tmp.size(); ++i) {
+      sumX[i] /= count[i]; sumY[i] /= count[i]; sumD[i] /= count[i];
+      double gha = 0.;
+      if(count[i] > 0.) {gha = stand.trees[i].impact / (count[i]*dxy*dxy);}
+      cout << stand.trees[i].nr << " " << gha;
+      cout << " " << sqrt(pow(sumX[i] - stand.trees[i].x,2) + pow(sumY[i] - stand.trees[i].y,2));
+      cout << " " << atan2(sumY[i] - stand.trees[i].y, sumX[i] - stand.trees[i].x);
+      cout << " " << sumD[i] / (2./3. * sqrt(count[i]*dxy*dxy) / M_PI)
+	   << endl;
+    }
+  }
+  
+  //Assign plot area to trees - Share pixel between trees
   cout << "\nBasal area from single tree growing shared area on raster" << endl;
   cout << "tree g/ha" << endl;
   {
@@ -238,33 +301,5 @@ int main(int argc, char *argv[]) {
       cout << stand.trees[i].nr << " " << gha << endl;
     }
   }
-
-  //assign plot area to trees - Winner takes it all
-  //### MISSING: distanceCenter directionCenter uncircularity ###
-  cout << "\nBasal area from single tree growing area on raster" << endl;
-  cout << "tree g/ha distanceCenter directionCenter uncircularity" << endl;
-  {
-    for(auto&& i : stand.trees) {i.impact = pow(i.d/2.,2) * M_PI;}
-    for(auto&& i : stand.trees) {i.influence0 = i.d/4.;}
-    std::array<double, 4> ext = stand.poly.getExtends();
-    double dxy = 0.1; //Distance between raster point
-    std::valarray<double> tmp(0., stand.trees.size());
-    std::valarray<unsigned int> count(0U, stand.trees.size());
-    for(double x = ext[0]; x <= ext[1]; x += dxy) {
-      for(double y = ext[2]; y <= ext[3]; y += dxy) {
-	if(stand.poly.pointInPolyCN(x, y)) {
-	  tmp = stand.influencePoint(x, y, funCircleWgt, false);
-	  auto result = std::max_element(begin(tmp), end(tmp));
-	  ++count[distance(begin(tmp), result)];
-	}
-      }
-    }
-    for(size_t i = 0; i<tmp.size(); ++i) {
-      double gha = 0.;
-      if(count[i] > 0.) {gha = stand.trees[i].impact / (count[i]*dxy*dxy);}
-      cout << stand.trees[i].nr << " " << gha << endl;
-    }
-  }
-
   
 }

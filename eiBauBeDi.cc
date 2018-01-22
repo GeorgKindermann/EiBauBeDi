@@ -167,6 +167,11 @@ namespace EiBauBeDi {
     return(f(px-x, py-y, influence0, influence1));
   }
 
+  double tree::getWeight(const double &px, const double &py, double f(const double &px, const double &py, const tree &tree)) {
+    return(f(px, py, *this));
+  }
+
+
   
   forestStand::forestStand(const std::vector<std::pair<double, double> > &cornerPoints) :
     poly(cornerPoints) {}
@@ -177,10 +182,10 @@ namespace EiBauBeDi {
     return(sum);
   }
 
-  double forestStand::subsamplePoint(const double &px, const double &py, double f(const double &dx, const double &dy, const double &influence0, const double &influence1), const bool &makeBorderCorrection) {
+  double forestStand::subsamplePoint(const double &px, const double &py, double f(const double &px, const double &py, const tree &tree), const bool &makeBorderCorrection) {
     double sum=0.;
     for(auto&& i : trees) {
-      double wgt = f(i.x-px, i.y-py, i.influence0, i.influence1);
+      double wgt = f(px, py, i);
       if(wgt > 0.) {
 	double borderCor = 1.;
 	if(makeBorderCorrection) {
@@ -224,12 +229,12 @@ namespace EiBauBeDi {
     return(sum);
   }
 
-  std::valarray<double> forestStand::subsamplePointTree(const double &px, const double &py, double f(const double &dx, const double &dy, const double &influence0, const double &influence1), const bool &makeBorderCorrection) {
+  std::valarray<double> forestStand::subsamplePointTree(const double &px, const double &py, double f(const double &px, const double &py, const tree &tree), const bool &makeBorderCorrection) {
     std::valarray<double> ret(0., trees.size());
     double sum=0.;
     for(size_t j=0; j<trees.size(); ++j) {
       auto&& i = trees[j];
-      double wgt = f(i.x-px, i.y-py, i.influence0, i.influence1);
+      double wgt = f(px, py, i);
       if(wgt > 0.) {
 	ret[j] = 1.;
 	double borderCor = 1.;
@@ -242,11 +247,11 @@ namespace EiBauBeDi {
     return(ret);
   }
 
-  std::valarray<double> forestStand::influencePoint(const double &px, const double &py, double f(const double &dx, const double &dy, const double &influence0, const double &influence1), const bool &makeBorderCorrection) {
+  std::valarray<double> forestStand::influencePoint(const double &px, const double &py, double f(const double &px, const double &py, const tree &tree), const bool &makeBorderCorrection) {
     std::valarray<double> ret(0., trees.size());
     for(size_t j=0; j<trees.size(); ++j) {
       auto&& i = trees[j];
-      double wgt = f(i.x-px, i.y-py, i.influence0, i.influence1);
+      double wgt = f(px, py, i);
       if(wgt > 0.) {
 	double borderCor = 1.;
 	if(makeBorderCorrection) {
@@ -259,73 +264,3 @@ namespace EiBauBeDi {
 
  
 }
-
-/*
-  //assign plot area to trees - Winner takes it all
-  {
-    cout << "\nBasal area from single tree growing area on raster" << endl;
-    cout << "tree g/ha distanceCenter directionCenter uncircularity" << endl;
-    //Find plot extends
-    EiBauBeDi::point plu = {plotCorners[0].x,plotCorners[0].y};
-    EiBauBeDi::point pro = {plotCorners[0].x,plotCorners[0].y};
-    for(auto&& i : plotCorners) {
-      plu.x = min(plu.x, i.x); plu.y = min(plu.y, i.y);
-      pro.x = max(pro.x, i.x); pro.y = max(pro.y, i.y);
-    }
-    double dxy = 0.1; //Distance between raster points
-    valarray<unsigned int> sump(0u, trees.size());
-    valarray<double> sumpX(0., trees.size());
-    valarray<double> sumpY(0., trees.size());
-    valarray<double> sumd(0., trees.size());
-    for(double x = plu.x + dxy/2.; x <= pro.x; x += dxy) {
-      for(double y = plu.y + dxy/2.; y <= pro.y; y += dxy) {
-	if(EiBauBeDi::pointInPolyCN(EiBauBeDi::point{x, y}, plotCorners)) {
-	  size_t winner = 0;
-	  double minInfl = std::numeric_limits<double>::infinity();
-	  size_t line = 0;
-	  for(auto&& i : trees) {
-	    double infl = (pow(i.x - x, 2) + pow(i.y - y, 2)) / pow(i.d,2);
-	    if(minInfl > infl) {
-	      minInfl = infl;
-	      winner = line;
-	    }
-	    ++line;
-	  }
-	  ++sump[winner];
-	  sumpX[winner] += x; sumpY[winner] += y;
-	}
-      }
-    }
-    for(double x = plu.x + dxy/2.; x <= pro.x; x += dxy) {
-      for(double y = plu.y + dxy/2.; y <= pro.y; y += dxy) {
-	if(EiBauBeDi::pointInPolyCN(EiBauBeDi::point{x, y}, plotCorners)) {
-	  size_t winner = 0;
-	  double minInfl = std::numeric_limits<double>::infinity();
-	  size_t line = 0;
-	  for(auto&& i : trees) {
-	    double infl = (pow(i.x - x, 2) + pow(i.y - y, 2)) / pow(i.d,2);
-	    if(minInfl > infl) {
-	      minInfl = infl;
-	      winner = line;
-	    }
-	    ++line;
-	  }
-	  double centerX = sumpX[winner] / sump[winner];
-	  double centerY = sumpY[winner] / sump[winner];
-	  sumd[winner] += sqrt(pow(centerX - x, 2) + pow(centerY - y, 2));
-	}
-      }
-    }
-    for(size_t i=0; i < trees.size(); ++i) {
-      double area = sump[i]*dxy*dxy;
-      cout << trees[i].nr << " " << pow(trees[i].d/2.,2)*M_PI/area
-	   << " " << sqrt(pow(sumpX[i] / sump[i] - trees[i].x,2) + pow(sumpY[i] / sump[i] - trees[i].y,2))
-	   << " " << atan2(sumpY[i] / sump[i] - trees[i].y, sumpX[i] / sump[i] - trees[i].x)
-	   << " " << (sumd[i] / sump[i]) / (2./3. * sqrt(area) / M_PI)
-	   << endl;
-    }
-  }
-
-}
-
-*/

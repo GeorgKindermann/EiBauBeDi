@@ -71,6 +71,7 @@ namespace EiBauBeDi {
     double influence0;
     double influence1;
     double getWeight(const double &px, const double &py, double f(const double &dx, const double &dy, const double &influence0, const double &influence1));
+    double getWeight(const double &px, const double &py, double f(const double &px, const double &py, const tree &tree));
   private:
   };
 
@@ -81,10 +82,10 @@ namespace EiBauBeDi {
     //~stand();
     polygon poly;
     double getImpactSum();
-    double subsamplePoint(const double &px, const double &py, double f(const double &dx, const double &dy, const double &influence0, const double &influence1), const bool &makeBorderCorrection); //Sample at x, y
+    double subsamplePoint(const double &px, const double &py, double f(const double &px, const double &py, const tree &tree), const bool &makeBorderCorrection); //Sample at x, y
     double subsampleCircle(const double &px, const double &py, const double &r, const bool &makeBorderCorrection);
-    std::valarray<double> subsamplePointTree(const double &px, const double &py, double f(const double &dx, const double &dy, const double &influence0, const double &influence1), const bool &makeBorderCorrection);
-    std::valarray<double> influencePoint(const double &px, const double &py, double f(const double &dx, const double &dy, const double &influence0, const double &influence1), const bool &makeBorderCorrection);
+    std::valarray<double> subsamplePointTree(const double &px, const double &py, double f(const double &px, const double &py, const tree &tree), const bool &makeBorderCorrection);
+    std::valarray<double> influencePoint(const double &px, const double &py, double f(const double &px, const double &py, const tree &tree), const bool &makeBorderCorrection);
     std::vector<tree> trees;
   private:
   };
