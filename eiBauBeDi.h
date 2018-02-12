@@ -25,6 +25,7 @@
 #include <stack>
 #include <numeric>
 #include <tuple>
+#include <forward_list>
 
 namespace EiBauBeDi {
 
@@ -70,8 +71,11 @@ namespace EiBauBeDi {
     double impact; //e.g. the basal area, Volumne ...
     double influence0;
     double influence1;
-    double getWeight(const double &px, const double &py, double f(const double &dx, const double &dy, const double &influence0, const double &influence1));
+    //double getWeight(const double &px, const double &py, double f(const double &dx, const double &dy, const double &influence0, const double &influence1));
     double getWeight(const double &px, const double &py, double f(const double &px, const double &py, const tree &tree));
+    friend class forestStand;
+  protected:
+    double pointInfl;
   private:
   };
 
@@ -87,6 +91,7 @@ namespace EiBauBeDi {
     std::valarray<double> subsamplePointTree(const double &px, const double &py, double f(const double &px, const double &py, const tree &tree), const bool &makeBorderCorrection);
     std::valarray<double> influencePoint(const double &px, const double &py, double f(const double &px, const double &py, const tree &tree), const bool &makeBorderCorrection);
     std::vector<tree> trees;
+    std::valarray<double> rasterize(const double &xmin, const double &xmax, const double &ymin, const double &ymax, const double &dx, const double &dy,const double &c1, const double &c2); //Prototype
   private:
   };
   

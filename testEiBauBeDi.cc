@@ -218,7 +218,6 @@ int main(int argc, char *argv[]) {
   }
 
   //assign plot area to trees - Winner takes it all
-  //### MISSING: distanceCenter directionCenter uncircularity ###
   cout << "\nBasal area from single tree growing area on raster" << endl;
   cout << "tree g/ha distanceCenter directionCenter uncircularity" << endl;
   {
@@ -301,5 +300,22 @@ int main(int argc, char *argv[]) {
       cout << stand.trees[i].nr << " " << gha << endl;
     }
   }
-  
+
+  //Rasterize example
+  cout << "\nBasal area from single tree growing shared area using rasterize" << endl;
+  cout << "tree g/ha" << endl;
+  for(auto&& i : stand.trees) {i.impact = pow(i.d/2.,2) * M_PI;}
+  for(auto&& i : stand.trees) {i.influence0 = i.d/4.;}
+  {
+    std::array<double, 4> ext = stand.poly.getExtends();
+    std::valarray<double> area(0., stand.trees.size());
+    area = stand.rasterize(ext[0],ext[1],ext[2],ext[3], 0.1, 0.1, 0.5, 2);
+    for(size_t i = 0; i<area.size(); ++i) {
+      double gha = 0.;
+      if(area[i] > 0.) {gha = stand.trees[i].impact / area[i];}
+      cout << stand.trees[i].nr << " " << gha << endl;
+    }
+  }
+
+  return(0);
 }
