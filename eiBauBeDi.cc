@@ -17,6 +17,9 @@
 
 #include "eiBauBeDi.h"
 
+#include <iostream>
+
+
 #ifndef M_PI
 #define M_PI 3.141592653589793238462643383279502884L
 #endif
@@ -190,7 +193,7 @@ namespace EiBauBeDi {
 	double borderCor = 1.;
 	if(makeBorderCorrection) {
 	  borderCor /= poly.shareInside(px, py, sqrt(pow(i.x-px,2) + pow(i.y-py,2)));}
-	sum += i.impact * wgt + borderCor;
+	sum += i.impact * wgt * borderCor;
       }
     }
     return(sum);
@@ -240,7 +243,7 @@ namespace EiBauBeDi {
 	double borderCor = 1.;
 	if(makeBorderCorrection) {
 	  borderCor /= poly.shareInside(px, py, sqrt(pow(i.x-px,2) + pow(i.y-py,2)));}
-	sum += i.impact * wgt + borderCor;
+	sum += i.impact * wgt * borderCor;
       }
     }
     ret *= sum;
@@ -256,7 +259,7 @@ namespace EiBauBeDi {
 	double borderCor = 1.;
 	if(makeBorderCorrection) {
 	  borderCor /= poly.shareInside(px, py, sqrt(pow(i.x-px,2) + pow(i.y-py,2)));}
-	ret[j] += i.impact * wgt + borderCor;
+	ret[j] += i.impact * wgt * borderCor;
       }
     }
     return(ret);
@@ -264,6 +267,7 @@ namespace EiBauBeDi {
 
   std::valarray<double> forestStand::rasterize(const double &xmin, const double &xmax, const double &ymin, const double &ymax, const double &dx, const double &dy, const double &c1, const double &c2) {
     std::valarray<double> ret(0., trees.size());
+    for(auto&& i : trees) {i.maxDist2 = pow(i.influence0,2);}
     std::stack<tree *> treeSortedX; //Trees sorted in x by there influence 
     {
       std::vector<tree *> tmp;
@@ -307,9 +311,11 @@ namespace EiBauBeDi {
 	      treeWithInfluenceY.erase_after(it0);
 	    } else { //Tree might have an influence
 	      tree &ctree = **it1;
-	      double distance = sqrt(pow(ctree.x - x, 2) + pow(ctree.y - y, 2));
-	      if(distance < ctree.influence0) {
-		ctree.pointInfl = ctree.h * (1. - pow(distance / ctree.influence0, c1));
+	      double distance2 = pow(ctree.x - x, 2) + pow(ctree.y - y, 2);
+	      if(distance2 < ctree.maxDist2) {
+		//ctree.pointInfl = ctree.h * (1. - pow(sqrt(distance2) / ctree.influence0, c1));
+		ctree.pointInfl = ctree.h * (1. - pow(distance2 / ctree.maxDist2, c1/2.)); //This pow costs some time
+		//ctree.pointInfl = ctree.h * (1. - distance2 / ctree.maxDist2); //Alternativ when c1 is 2
 	      } else {ctree.pointInfl = 0.;}
 	      if(inflMax < ctree.pointInfl) {inflMax = ctree.pointInfl;}
 	      it0 = it1++;
@@ -332,5 +338,73 @@ namespace EiBauBeDi {
     ret *= dx*dy;
     return(ret);
   }
- 
+
+
+    std::valarray<double> forestStand::rasterizeWta(const double &xmin, const double &xmax, const double &ymin, const double &ymax, const double &dx, const double &dy) {
+    std::valarray<double> ret(0., trees.size());
+    for(auto&& i : trees) {i.maxDist2 = pow(i.influence0,2);}
+    std::stack<tree *> treeSortedX; //Trees sorted in x by there influence 
+    {
+      std::vector<tree *> tmp;
+      for(std::vector<tree>::iterator it = trees.begin() ; it != trees.end(); ++it) {
+	tmp.push_back(&*it);
+      }
+      std::sort(tmp.begin(), tmp.end(), [](tree *a, tree *b) {
+	  return (a->x - a->influence0) > (b->x - b->influence0);});
+      for(auto i : tmp) {treeSortedX.push(i);}
+    }
+    std::forward_list<tree *> treeWithInfluenceY;
+    for(double x = xmin; x <= xmax; x += dx) {
+      { //Remove trees which lost influence
+	std::forward_list<tree *>::iterator it0 = treeWithInfluenceY.before_begin();
+	std::forward_list<tree *>::iterator it1 = treeWithInfluenceY.begin();
+	for(;it1 != treeWithInfluenceY.end();) { 
+	  if(((*it1)->x + (*it1)->influence0) < x) {
+	    ++it1;
+	    treeWithInfluenceY.erase_after(it0);
+	  } else {it0 = it1++;}
+	}
+      }
+      { //Insert trees which get influence
+	std::forward_list<tree *> tmp;
+	while(!treeSortedX.empty() && (treeSortedX.top()->x - treeSortedX.top()->influence0) < x) {
+	  tmp.push_front(treeSortedX.top());
+	  treeSortedX.pop();
+	}
+	tmp.sort([](tree *a, tree *b) {return (a->y - a->influence0) < (b->y - b->influence0);});
+	treeWithInfluenceY.merge(tmp, [](tree *a, tree *b) {return (a->y - a->influence0) < (b->y - b->influence0);});
+      }
+      std::forward_list<tree *> treeWithInfluence(treeWithInfluenceY);
+      for(double y = ymin; y <= ymax; y += dy) {
+	if(poly.pointInPolyCN(x, y)) {
+	  std::forward_list<tree *>::iterator it0 = treeWithInfluence.before_begin();
+	  std::forward_list<tree *>::iterator it1 = treeWithInfluence.begin();
+	  std::forward_list<tree *>::iterator winner = treeWithInfluence.end();
+	  double winnersInfluece = INFINITY;
+	  for(;it1 != treeWithInfluence.end() && ((*it1)->y - (*it1)->influence0) < y;) {
+	    tree &ctree = **it1;
+	    double distance2 = pow(ctree.x - x, 2) + pow(ctree.y - y, 2);
+	    if(distance2 < ctree.maxDist2) {
+	      double influence = distance2 / ctree.maxDist2;
+	      if(winnersInfluece > influence) {
+		winnersInfluece = influence;
+		winner = it1;
+	      }
+	    } else if(((*it1)->y + (*it1)->influence0) < y) { //Lost influence
+	      it1 = it0;
+	      treeWithInfluenceY.erase_after(it0);
+	    }
+	    it0 = it1++;
+	  }
+	  if(winner != treeWithInfluence.end()) {
+	    ++ret[*winner - &*trees.begin()];
+	  }
+	}
+      }
+    }
+    ret *= dx*dy;
+    return(ret);
+  }
+
 }
+

@@ -1,4 +1,4 @@
-CC = g++ -Wall -O3 -funroll-loops -march=native -mtune=native
+CC = g++ -Wall -O3 -march=native -mtune=native -pipe
 
 all:	eiBauBeDi.o testEiBauBeDi
 

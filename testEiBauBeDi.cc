@@ -23,6 +23,7 @@
 #include <sstream>
 #include <cmath>
 #include <valarray>
+#include <chrono>
 
 #include "eiBauBeDi.h"
 
@@ -59,6 +60,180 @@ double funCircleWgt(const double &px, const double &py, const EiBauBeDi::tree &t
   }
   return(weight);
 }
+double funCircleWgt2(const double &px, const double &py, const EiBauBeDi::tree &tree) {
+  double weight = 0.;
+  double dx = tree.x - px;
+  double dy = tree.y - py;
+  if(max(dx, dy) < tree.influence0) {
+    double distance = sqrt(pow(dx, 2) + pow(dy, 2));
+    if(distance < tree.influence0) {
+      weight = tree.h * (1. - pow(distance / tree.influence0, tree.influence1));
+    }
+  }
+  return(weight);
+}
+
+
+
+//BEGIN
+/*
+
+class wuchsraum {
+public:
+  //dx, dy, minx, miny, maxx, maxy
+  wuchsraum(double=1.,double=1.,double=NAN,double=NAN,double=NAN,double=NAN);
+  //Insert a tree (x,y,w0,rMax,w1,id)
+ unsigned int insertTree(double, double, double=1.,double=INFINITY,double=1.);
+ unsigned int size(void); //return number of trees
+ double getGrowingSpace(unsigned int); //returns the growing space of tree i
+  //unsigned int calcGrowingSpaceFaber(vector<vector<unsigned int>> &);
+ unsigned int calcGrowingSpaceFaber();
+private:
+  double minx;
+  double miny;
+  double maxx;
+  double maxy;
+  double dx;
+  double dy;
+  struct tree {
+    double x;
+    double y;
+    double w0;
+    double rMax;
+    double w1;
+    double growingSpace;
+    double rMax2;
+    double yMin;
+    double xMax;
+    double w02;
+  };
+  vector<tree> trees;
+};
+
+//unsigned int wuchsraum::calcGrowingSpaceFaber(vector<vector<unsigned int>> &matrix) {
+unsigned int wuchsraum::calcGrowingSpaceFaber() {
+  forward_list<tree *> treesSortX;
+  for(unsigned int i=0; i<size(); ++i) {
+    trees[i].growingSpace = 0.;
+    treesSortX.push_front(&trees[i]);
+  }
+  struct {
+    bool operator()(tree * a, tree * b) {
+      return((a->x - a->rMax) < (b->x - b->rMax));
+    }
+  } compFunX;
+  struct {
+    bool operator()(tree * a, tree * b) {
+      return((a->yMin) < (b->yMin));
+    }
+  } compFunY;
+  treesSortX.sort(compFunX);
+  forward_list<tree *> treesActiveXSortY;
+  forward_list<tree *> newTrees;
+  unsigned int col = 0;
+  for(double x=minx; x<maxx; x+=dx, ++col) {
+    while(!treesSortX.empty()
+          && x > (**treesSortX.begin()).x - (**treesSortX.begin()).rMax) {
+      newTrees.push_front(*treesSortX.begin());
+      treesSortX.pop_front();
+    }
+    newTrees.sort(compFunY);
+    auto iter0pre = treesActiveXSortY.before_begin();
+    auto iter0 = treesActiveXSortY.begin();
+    while(iter0 != treesActiveXSortY.end() && !newTrees.empty()) {
+      if((**iter0).yMin < (**newTrees.begin()).yMin) {
+        iter0pre = iter0;
+        ++iter0;
+      } else {
+        treesActiveXSortY.insert_after(iter0pre, *newTrees.begin());
+        ++iter0pre;
+        newTrees.pop_front();
+      }
+    }
+    while(!newTrees.empty()) {
+      treesActiveXSortY.insert_after(iter0pre, *newTrees.begin());
+      newTrees.pop_front();
+      ++iter0pre;
+    }
+    iter0pre = treesActiveXSortY.before_begin();
+    iter0 = treesActiveXSortY.begin();
+    forward_list<tree *> treesActive;
+    unsigned int row = 0;
+    for(double y=miny; y<maxy; y+=dy, ++row) {
+      while(iter0 != treesActiveXSortY.end()
+            && y > (**iter0).yMin) {
+        if(x > (**iter0).xMax) {
+          treesActiveXSortY.erase_after(iter0pre);
+          iter0 = iter0pre;
+        } else {
+          treesActive.push_front(*iter0);
+        }
+        iter0pre = iter0;
+        ++iter0;
+      }
+      auto iter1pre = treesActive.before_begin();
+      auto iter1 = treesActive.begin();
+      tree * winner = NULL;
+      double faberWinner = INFINITY;
+      while(iter1 != treesActive.end()) {
+        double dx = x - (**iter1).x;
+        double dy = y - (**iter1).y;
+        double dist2 = dx*dx + dy*dy;
+        if(dist2 <= (**iter1).rMax2) {
+          double faber = dist2 / (**iter1).w02;
+          if(faberWinner > faber) {
+            faberWinner = faber;
+            winner = *iter1;
+          }
+        } else if(y > (**iter1).y) {
+          treesActive.erase_after(iter1pre);
+          iter1 = iter1pre;
+        }
+        iter1pre = iter1;
+        ++iter1;
+      }
+      if(winner != NULL) {
+        ++(*winner).growingSpace;
+	//matrix[row][col] = 1 + winner - &trees[0];
+      }
+    }
+  }
+  return(size());
+}
+
+double wuchsraum::getGrowingSpace(unsigned int i) {
+  if(i < size()) {return(trees[i].growingSpace*dx*dy);}
+  return(NAN);
+}
+
+unsigned int wuchsraum::insertTree(double x, double y, double w0, double rMax
+    , double w1) {
+    trees.push_back((tree){x,y,w0,rMax,w1,NAN,rMax*rMax,y-rMax,x+rMax,w0*w0});
+  return(size());
+}
+
+unsigned int wuchsraum::size(void) {
+  return(trees.size());
+}
+
+wuchsraum::wuchsraum(double adx, double ady, double aminx, double aminy
+    , double amaxx,double amaxy) {
+  dx = abs(adx);
+  dy = abs(ady);
+  if(dx == 0. || dy == 0.) {
+    cout << "dx or dy is equal to 0\n";
+    //    exit(0);
+  }
+  minx = aminx; miny = aminy;
+  maxx = amaxx; maxy = amaxy;
+  if(minx > maxx) {minx = amaxx; maxx = aminx;}
+  if(miny > maxy) {miny = amaxy; maxy = aminy;}
+}
+
+*/
+//END
+
+
 
 
 int main(int argc, char *argv[]) {
@@ -114,6 +289,8 @@ int main(int argc, char *argv[]) {
     }
   }
 
+  /*
+  
   //Set the tree impact to its basal area
   for(auto&& i : stand.trees) {i.impact = pow(i.d/2.,2) * M_PI;}
   //Basal area / hectare of the plot
@@ -316,6 +493,53 @@ int main(int argc, char *argv[]) {
       cout << stand.trees[i].nr << " " << gha << endl;
     }
   }
+
+  */
+
+  //Speed comparrison
+  cout << "\nBasal area from single tree growing shared area on raster" << endl;
+  cout << "tree area0 area1 area2" << endl;
+   {
+    for(auto&& i : stand.trees) {i.impact = 1.;}
+    for(auto&& i : stand.trees) {i.influence0 = i.d/4.;}
+    for(auto&& i : stand.trees) {i.influence1 = 0.5;}
+    std::array<double, 4> ext = stand.poly.getExtends();
+    double dxy = 0.1; //Distance between raster point
+    auto t0 = std::chrono::high_resolution_clock::now();
+    std::valarray<double> tmp(0., stand.trees.size());
+    std::valarray<double> area(0., stand.trees.size());
+    for(double x = ext[0]; x <= ext[1]; x += dxy) {
+      for(double y = ext[2]; y <= ext[3]; y += dxy) {
+	if(stand.poly.pointInPolyCN(x, y)) {
+	  tmp = stand.influencePoint(x, y, funCircleWgt2, false);
+	  tmp /= tmp.max();
+	  tmp = pow(tmp, 2.);
+	  double total = tmp.sum();
+	  if(total > 0.) {area += tmp/total;}
+	}
+      }
+    }
+    area *= dxy*dxy;
+    auto t1 = std::chrono::high_resolution_clock::now();
+    std::valarray<double> area1(0., stand.trees.size());
+    //area1 = stand.rasterize(ext[0],ext[1],ext[2],ext[3], 0.1, 0.1, 0.5, 2);
+    area1 = stand.rasterize(ext[0],ext[1],ext[2],ext[3], dxy, dxy, 0.5, 2);
+    auto t2 = std::chrono::high_resolution_clock::now();
+    std::valarray<double> area2(0., stand.trees.size());
+    area2 = stand.rasterizeWta(ext[0],ext[1],ext[2],ext[3], dxy, dxy);
+    auto t3 = std::chrono::high_resolution_clock::now();
+    double sum0=0.; double sum1=0.; double sum2=0.;
+    for(size_t i = 0; i<tmp.size(); ++i) {
+      cout << stand.trees[i].nr << " " << area[i] << " " << area1[i] << " " << area2[i] << endl;
+      sum0 += area[i]; sum1 += area1[i]; sum2 += area2[i];
+    }
+    std::chrono::duration<double> diff0 = t1 - t0;
+    std::chrono::duration<double> diff1 = t2 - t1;
+    std::chrono::duration<double> diff2 = t3 - t2;
+    cout << "Duration: " << diff0.count() << " " << diff1.count() << " " << diff2.count() << endl;
+    cout << sum0 << " " << sum1 << " " << sum2 << endl;
+  }
+
 
   return(0);
 }

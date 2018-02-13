@@ -76,6 +76,7 @@ namespace EiBauBeDi {
     friend class forestStand;
   protected:
     double pointInfl;
+    double maxDist2;
   private:
   };
 
@@ -92,7 +93,9 @@ namespace EiBauBeDi {
     std::valarray<double> influencePoint(const double &px, const double &py, double f(const double &px, const double &py, const tree &tree), const bool &makeBorderCorrection);
     std::vector<tree> trees;
     std::valarray<double> rasterize(const double &xmin, const double &xmax, const double &ymin, const double &ymax, const double &dx, const double &dy,const double &c1, const double &c2); //Prototype
+    std::valarray<double> rasterizeWta(const double &xmin, const double &xmax, const double &ymin, const double &ymax, const double &dx, const double &dy); //Prototype
   private:
   };
+
   
 }
