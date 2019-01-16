@@ -1,6 +1,6 @@
 // eiBauBeDi 0.1a, EInzelBAUmBEstandesDIchte - Single Tree Stand Density
 // Programm to calculte the stand density of singe trees in a forest stand
-// Copyright (C) 2017-2018 Georg Kindermann
+// Copyright (C) 2017-2019 Georg Kindermann
 // Home: https://github.com/GeorgKindermann/EiBauBeDi
 
 // This program is free software: you can redistribute it and/or modify
@@ -76,7 +76,7 @@ double fun0Rast(const EiBauBeDi::tree &ctree, const double &dist2, const double 
   return(pow(ctree.h * (1. - pow(dist2 / maxDist2, c1)),c2));
   //return(ctree.h * (1. - dist2 / maxDist2));
 }
-double fun0RastWta(const EiBauBeDi::tree &ctree, const double &dist2, const double &maxDist2, const double &c1, const double &c2) {
+double fun0RastWta(const EiBauBeDi::tree &ctree __attribute__((unused)), const double &dist2, const double &maxDist2, const double &c1 __attribute__((unused)), const double &c2 __attribute__((unused))) {
   return(dist2 / maxDist2);
 }
   
@@ -240,7 +240,7 @@ int main(int argc, char *argv[]) {
 
   //assign plot area to trees - Winner takes it all
   cout << "\nBasal area from single tree growing area on raster" << endl;
-  cout << "tree g/ha distanceCenter directionCenter uncircularity" << endl;
+  cout << "tree g/ha distanceCenter directionCenter uncircularity axis" << endl;
   {
     for(auto&& i : stand.trees) {i.impact = pow(i.d/2.,2) * M_PI;}
     for(auto&& i : stand.trees) {i.influence0 = i.d/4.;}
@@ -253,6 +253,10 @@ int main(int argc, char *argv[]) {
     valarray<double> sumX(0., stand.trees.size());
     valarray<double> sumY(0., stand.trees.size());
     valarray<double> sumD(0., stand.trees.size());
+    valarray<double> sumXY(0., stand.trees.size());
+    valarray<double> sumX2(0., stand.trees.size());
+    valarray<double> sumY2(0., stand.trees.size());
+    valarray<double> comp(0., stand.trees.size()*stand.trees.size());
     for(double x = ext[0]; x <= ext[1]; x += dxy) {
       for(double y = ext[2]; y <= ext[3]; y += dxy) {
 	if(stand.poly.pointInPolyCN(x, y)) {
@@ -261,16 +265,15 @@ int main(int argc, char *argv[]) {
 	  size_t idx = distance(begin(tmp), result);
 	  ++count[idx];
 	  sumX[idx] += x; sumY[idx] += y;
+	  comp[slice(idx*stand.trees.size(), stand.trees.size(), 1)] += tmp;
 	}
       }
     }
     valarray<double> treeX(0., stand.trees.size());
     valarray<double> treeY(0., stand.trees.size());
-    for(size_t i=0; i<count.size(); ++i) {
-      treeX[i] = stand.trees[i].x;
-      treeY[i] = stand.trees[i].y;
-      stand.trees[i].x = sumX[i] / count[i];
-      stand.trees[i].y = sumY[i] / count[i];
+    for(size_t i=0; i<count.size(); ++i) { //Schwerpunkt der Standflaeche
+      treeX[i] = sumX[i] / count[i];
+      treeY[i] = sumY[i] / count[i];
     }
     for(double x = ext[0]; x <= ext[1]; x += dxy) {
       for(double y = ext[2]; y <= ext[3]; y += dxy) {
@@ -278,12 +281,13 @@ int main(int argc, char *argv[]) {
 	  tmp = stand.influencePoint(x, y, funCircleWgt, false);
 	  auto result = std::max_element(begin(tmp), end(tmp));
 	  size_t idx = distance(begin(tmp), result);
-	  sumD[idx] += sqrt(pow(stand.trees[idx].x - x, 2) + pow(stand.trees[idx].y - y, 2));
+	  sumD[idx] += sqrt(pow(treeX[idx] - x, 2) + pow(treeY[idx] - y, 2));
+	  sumXY[idx] += (x-treeX[idx]) * (y - treeY[idx]);
+	  sumX2[idx] += pow(x-treeX[idx], 2);
+	  sumY2[idx] += pow(y-treeY[idx], 2);
 	}
       }
     }
-    for(size_t i=0; i<count.size(); ++i) {
-      stand.trees[i].x = treeX[i]; stand.trees[i].y = treeY[i];}
     for(size_t i = 0; i<tmp.size(); ++i) {
       sumX[i] /= count[i]; sumY[i] /= count[i]; sumD[i] /= count[i];
       double gha = 0.;
@@ -291,8 +295,23 @@ int main(int argc, char *argv[]) {
       cout << stand.trees[i].nr << " " << gha;
       cout << " " << sqrt(pow(sumX[i] - stand.trees[i].x,2) + pow(sumY[i] - stand.trees[i].y,2));
       cout << " " << atan2(sumY[i] - stand.trees[i].y, sumX[i] - stand.trees[i].x);
-      cout << " " << sumD[i] / (2./3. * sqrt(count[i]*dxy*dxy) / M_PI)
-	   << endl;
+      cout << " " << sumD[i] / (2./3. * sqrt(count[i]*dxy*dxy) / M_PI);
+      cout << " " << (sumXY[i] / sumX2[i] + sumY2[i] / sumXY[i]) / 2.;
+      cout << endl;
+    }
+    cout << "tree Competitor..." << endl;
+    cout << "X";
+    for(size_t i = 0; i<tmp.size(); ++i) {cout << " " << stand.trees[i].nr;}
+    cout << endl;
+    for(size_t i = 0; i<tmp.size(); ++i) {
+      cout << stand.trees[i].nr;
+      valarray<double> competitors = comp[slice(i*stand.trees.size(), stand.trees.size(), 1)];
+      //competitors[i] = 0.; //In case the tree by itself should not be included
+      competitors /= competitors.sum();
+      for(size_t j = 0; j<stand.trees.size(); ++j) {
+	cout << " " << competitors[j];
+      }
+      cout << endl;
     }
   }
   

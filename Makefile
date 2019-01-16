@@ -1,4 +1,4 @@
-CC = g++ -Wall -O3 -march=native -mtune=native -pipe
+CC = g++ -Wall -Wextra -O3 -march=native -std=c++17
 
 all:	eiBauBeDi.o testEiBauBeDi
 
