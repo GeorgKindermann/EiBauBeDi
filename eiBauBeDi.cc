@@ -1,6 +1,6 @@
 // eiBauBeDi 0.1a, EInzelBAUmBEstandesDIchte - Single Tree Stand Density
 // Programm to calculte the stand density of singe trees in a forest stand
-// Copyright (C) 2017-2018 Georg Kindermann
+// Copyright (C) 2017-2019 Georg Kindermann
 // Home: https://github.com/GeorgKindermann/EiBauBeDi
 
 // This program is free software: you can redistribute it and/or modify
@@ -16,9 +16,6 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>
 
 #include "eiBauBeDi.h"
-
-#include <iostream>
-
 
 #ifndef M_PI
 #define M_PI 3.141592653589793238462643383279502884L
@@ -85,7 +82,29 @@ namespace EiBauBeDi {
     }
     return(nx % 2);
   }
-  
+
+  bool polygon::pointOnPoly(const double &x, const double &y) {
+    bool ret = false;
+    std::vector<point>::const_iterator previous = std::prev(corners.end());
+    for(std::vector<point>::const_iterator current = corners.begin(); current != corners.end(); ++current) {
+      if(pointOnLine(*previous, *current, point{x, y})) {
+	ret = true;
+	break;
+      }
+      previous = current;
+    }
+    return(ret);
+  }
+
+  bool polygon::pointOnLine(const point &a, const point &b, const point &p) {
+    bool ret = false;
+    double AB = sqrt(pow(a.x - b.x,2) + pow(a.y - b.y,2));
+    double AP = sqrt(pow(p.x - a.x,2) + pow(p.y - a.y,2));
+    double PB = sqrt(pow(p.x - b.x,2) + pow(p.y - b.y,2));
+    if(AB == (AP + PB)) {ret = true;}
+    return(ret);
+  }
+
   std::vector<EiBauBeDi::polygon::point> polygon::cutLineCircle(const point &a0, const point &a1, const point &c, const double &r) {
     std::vector<point> ret;
     double dx = a1.x - a0.x;
@@ -93,7 +112,7 @@ namespace EiBauBeDi {
     double dr = std::sqrt(pow(dx, 2) + pow(dy,2));
     double D = (a0.x - c.x) * (a1.y - c.y) - (a1.x - c.x) * (a0.y - c.y);
     double incidence = std::pow(r,2) * std::pow(dr,2) - std::pow(D,2);
-    if(incidence > 0) { //==0 .. tangent is not needed here
+    if(incidence > 0.) { //==0 .. tangent is not needed here
       std::array<double, 2> x{};
       std::array<double, 2> y{};
       double tt = std::sqrt(incidence);
@@ -113,42 +132,55 @@ namespace EiBauBeDi {
     //Share of circle circumference inside polygon
   double polygon::shareInside(const double &x, const double &y, const double &radius) {
     double wgt = 1.;
-    //polygon is totaly inside the circle
-    unsigned int nPointsOutside = 0;
-    double r2 = std::pow(radius,2);
-    for(auto&& i : corners) {
-      double dist2 = std::pow(i.x - x, 2) + std::pow(i.y - y, 2);
-      if(dist2 > r2) {++nPointsOutside;}
+    if(radius > 0.) {
+      //polygon is totaly inside the circle
+      unsigned int nPointsOutside = 0;
+      double r2 = std::pow(radius,2);
+      for(auto&& i : corners) {
+	double dist2 = std::pow(i.x - x, 2) + std::pow(i.y - y, 2);
+	if(dist2 > r2) {++nPointsOutside;}
+      }
+      if(nPointsOutside > 0) {
+	std::vector<point> cutPoint;
+	{
+	  std::vector<point>::const_iterator previous = std::prev(corners.end());
+	  for(std::vector<point>::const_iterator current = corners.begin(); current != corners.end(); ++current) {
+	    std::vector<point> tmp = cutLineCircle(*previous, *current, point{x, y}, radius);
+	    cutPoint.insert(cutPoint.end(), tmp.begin(), tmp.end());
+	    previous = current;
+	  }
+	}
+	if(cutPoint.size() > 1) {
+	  std::vector<double> rad;
+	  for(auto&& i : cutPoint) {rad.push_back(atan2(i.y-y, i.x-x));}
+	  std::sort(rad.begin(), rad.end());
+	  auto last = std::unique(rad.begin(), rad.end());
+	  bool flipFlop = true;
+	  if(last != rad.end()) {flipFlop = false;}
+	  rad.erase(last, rad.end());
+	  if(rad.size() % 2) {flipFlop = false;}
+	  if(rad.size() > 1) {
+	    double sumIn = 0.;
+	    std::vector<double>::const_iterator previous = std::prev(rad.end());
+	    bool inPlot = true;
+	    for(std::vector<double>::const_iterator current = rad.begin(); current != rad.end(); ++current) {
+	      //double radDif = fmod(*current - *previous + M_PI * 2., M_PI * 2.);
+	      double radDif = *current - *previous;
+	      if(radDif < 0.) {radDif += M_PI * 2.;}
+	      if(!flipFlop || current == rad.begin()) {
+		double between = *previous + radDif/2.;
+		inPlot = pointInPolyCN(x + radius * cos(between), y + radius * sin(between));
+		if(pointOnPoly(x + radius * cos(between), y + radius * sin(between))) {inPlot = false;}
+	      }
+	      if(inPlot) {sumIn += radDif;}
+	      inPlot = !inPlot;
+	      previous = current;
+	    }
+	    wgt = sumIn/(2. * M_PI);
+	  }
+	}
+      } else {wgt = 0.;}
     }
-    if(nPointsOutside > 0) {
-      std::vector<point> cutPoint;
-      {
-	std::vector<point>::const_iterator previous = std::prev(corners.end());
-	for(std::vector<point>::const_iterator current = corners.begin(); current != corners.end(); ++current) {
-	  std::vector<point> tmp = cutLineCircle(*previous, *current, point{x, y}, radius);
-	  cutPoint.insert(cutPoint.end(), tmp.begin(), tmp.end());
-	  previous = current;
-	}
-      }
-      if(cutPoint.size() > 1) {
-	std::vector<double> rad;
-	for(auto&& i : cutPoint) {rad.push_back(atan2(y-i.y, x-i.x));}
-	std::sort(rad.begin(), rad.end());
-	auto last = std::unique(rad.begin(), rad.end());
-	rad.erase(last, rad.end());
-	double sumIn = 0.;
-	std::vector<double>::const_iterator previous = std::prev(rad.end());
-	double between = *previous + (*rad.begin() - *previous)/2.;
-	bool inPlot = pointInPolyCN(x + radius * cos(between), y + radius * sin(between));
-	for(std::vector<double>::const_iterator current = rad.begin(); current != rad.end(); ++current) {
-	  double tmp = fmod(*current - *previous + M_PI * 2., M_PI * 2.);
-	  if(inPlot) {sumIn += tmp;}
-	  inPlot = !inPlot;
-	  previous = current;
-	}
-	wgt = sumIn/(2. * M_PI);
-      }
-    } else {wgt = 0.;}
     return(wgt);
   }
 

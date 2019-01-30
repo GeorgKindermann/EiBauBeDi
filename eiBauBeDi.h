@@ -1,6 +1,6 @@
 // eiBauBeDi 0.1a, EInzelBAUmBEstandesDIchte - Single Tree Stand Density
 // Programm to calculte the stand density of singe trees in a forest stand
-// Copyright (C) 2017-2018 Georg Kindermann
+// Copyright (C) 2017-2019 Georg Kindermann
 // Home: https://github.com/GeorgKindermann/EiBauBeDi
 
 // This program is free software: you can redistribute it and/or modify
@@ -26,6 +26,7 @@
 #include <numeric>
 #include <tuple>
 #include <forward_list>
+#include <limits>
 
 namespace EiBauBeDi {
 
@@ -39,6 +40,7 @@ namespace EiBauBeDi {
     //  0 (false) = outside, 1 (true) = inside
     bool pointInPolyWN(const double &x, const double &y); //winding number
     bool pointInPolyCN(const double &x, const double &y); //crossing number
+    bool pointOnPoly(const double &x, const double &y);
     //Share of circle circumference inside polygon
     double shareInside(const double &x, const double &y, const double &radius);
     std::array<double, 4> getExtends();
@@ -46,14 +48,22 @@ namespace EiBauBeDi {
     struct point {
       double x;
       double y;
+      bool operator<(const point& rhs) const {
+	return std::tie(x, y) < std::tie(rhs.x, rhs.y);
+      }
+      bool operator==(const point& rhs) const {
+	return std::tie(x, y) == std::tie(rhs.x, rhs.y);
+      }
     };
     std::vector<point> corners;
-    //tests if a point is Left|On|Right of an infinite line.
+    //Tests if a point is Left|On|Right of an infinite line.
     //  >0 for P2 left of the line through P0 and P1, 0 for P2  on the line,
     //  <0 for P2  right of the line
     int isLeft(const point &p0, const point &p1, const point &p2);
     //Points where line cuts a circle
     std::vector<EiBauBeDi::polygon::point> cutLineCircle(const point &a0, const point &a1, const point &c, const double &r);
+    //Test if point is on a line
+    bool pointOnLine(const point &a, const point &b, const point &p);
   };
 
   class tree {
@@ -68,10 +78,10 @@ namespace EiBauBeDi {
     double d; //Diameter
     double h; //Height
     double hcr; //Height of the crown base
+    double wgt; //Weight for trees on the plot border
     double impact; //e.g. the basal area, Volumne ...
     double influence0;
     double influence1;
-    //double getWeight(const double &px, const double &py, double f(const double &dx, const double &dy, const double &influence0, const double &influence1));
     double getWeight(const double &px, const double &py, double f(const double &px, const double &py, const tree &tree));
     friend class forestStand;
   protected:
